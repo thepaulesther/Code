@@ -28,7 +28,8 @@ import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
 import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
-import { applyRecurring, hasSamples, removeSamples, stopRule, useAppData } from './lib/store';
+import { applyRecurring, changeBaseCurrency, hasSamples, isEmpty, removeSamples, stopRule, useAppData } from './lib/store';
+import { CurrencySelect } from './components/CurrencyFields';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
@@ -192,6 +193,28 @@ export default function App() {
             <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
           </div>
         </header>
+
+        {isEmpty(data) && (
+          <section className="welcome" aria-labelledby="welcome-title">
+            <h2 id="welcome-title">Your budget is empty. Let’s set it up.</h2>
+            <ol>
+              <li>
+                <span>Choose the currency your totals should be in:</span>
+                <CurrencySelect
+                  id="welcome-currency"
+                  label="Base currency"
+                  value={settings.currency}
+                  onChange={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
+                />
+              </li>
+              <li>Add your income and expenses with the <strong>Add transaction</strong> form. Amounts in other currencies are converted.</li>
+              <li>
+                For bills paid once a year, such as rent, set <strong>Repeats: Every year</strong>. The cost then counts
+                as one twelfth in each month.
+              </li>
+            </ol>
+          </section>
+        )}
 
         {hasSamples(data) && (
           <div className="sample-banner" role="note">

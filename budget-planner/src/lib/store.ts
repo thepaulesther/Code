@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
-  monthOf,
   SAMPLE_ONE_OFFS,
-  sampleData,
   todayISO,
   type Budgets,
   type Transaction,
@@ -109,7 +107,7 @@ export function stopRule(d: AppData, id: string, deletePayments: boolean): AppDa
   };
 }
 
-export function loadData(today: string): AppData {
+export function loadData(): AppData {
   const saved = readJSON(KEY);
   if (isAppData(saved)) return markLegacySamples({ ...saved, settings: { ...defaultSettings(), ...saved.settings } });
 
@@ -120,8 +118,12 @@ export function loadData(today: string): AppData {
     return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings: defaultSettings() };
   }
 
-  return { version: 2, ...sampleData(monthOf(today)), settings: defaultSettings() };
+  // First visit: start empty so every number on screen comes from the user's own entries.
+  return emptyData(defaultSettings());
 }
+
+export const isEmpty = (d: AppData) =>
+  d.transactions.length === 0 && d.recurring.length === 0 && Object.keys(d.budgets).length === 0;
 
 /** Add any repeating transactions that have come due. Returns the same object when nothing changed. */
 export function applyRecurring(data: AppData, today: string): AppData {
@@ -229,7 +231,7 @@ export function deleteCategory(d: AppData, type: TxType, name: string): AppData 
 /* ---------- Hook ---------- */
 
 export function useAppData() {
-  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(todayISO()), todayISO()));
+  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(), todayISO()));
 
   useEffect(() => writeJSON(KEY, data), [data]);
 
