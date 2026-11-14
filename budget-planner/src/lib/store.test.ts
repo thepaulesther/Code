@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveInMonth, sampleData, spendingByCategory } from './budget';
+import { effectiveInMonth, sampleData, spendingByCategory, type Transaction } from './budget';
 import { findSimilarRule } from './recurring';
 import {
   addCategory,
@@ -8,6 +8,7 @@ import {
   changeBaseCurrency,
   defaultSettings,
   deleteCategory,
+  editTransaction,
   hasSamples,
   isAppData,
   markLegacySamples,
@@ -88,6 +89,107 @@ describe('example data clean-up (the “Housing shows the old rent too” proble
     const d = applyRecurring(data(), '2026-12-03');
     expect(d.transactions.every((t) => t.sample)).toBe(true);
     expect(removeSamples(d).data.transactions).toEqual([]);
+  });
+});
+
+describe('editTransaction', () => {
+  const empty = (): AppData => ({ version: 2, transactions: [], budgets: {}, recurring: [], settings: { ...defaultSettings(), currency: 'NGN' } });
+  const fuel: Transaction = { id: 'f1', type: 'expense', amount: 60_000, category: 'Utilities', note: 'Generator fuel', date: '2026-09-05' };
+
+  it('turns a one-off into a monthly item, keeping it as the first payment and filling in the months since', () => {
+    const { data: d, added } = editTransaction({ ...empty(), transactions: [fuel] }, 'f1', fuel, 1, {}, '2026-11-14');
+    expect(added).toBe(2);
+    expect(d.recurring).toHaveLength(1);
+    const rule = d.recurring[0];
+    expect(rule).toMatchObject({ amount: 60_000, category: 'Utilities', note: 'Generator fuel', day: 5, startMonth: '2026-09', lastGenerated: '2026-11' });
+    expect(rule.everyMonths).toBeUndefined();
+    expect(d.transactions.map((t) => [t.id, t.date])).toEqual([
+      ['f1', '2026-09-05'],
+      [`${rule.id}:2026-10`, '2026-10-05'],
+      [`${rule.id}:2026-11`, '2026-11-05'],
+    ]);
+    expect(d.transactions.every((t) => t.recurringId === rule.id)).toBe(true);
+  });
+
+  it('can change the details while turning it into a repeating item', () => {
+    const changed = { ...fuel, amount: 75_000, note: 'Diesel' };
+    const { data: d } = editTransaction({ ...empty(), transactions: [fuel] }, 'f1', changed, 1, {}, '2026-10-20');
+    expect(d.transactions.map((t) => [t.note, t.amount])).toEqual([['Diesel', 75_000], ['Diesel', 75_000]]);
+  });
+
+  it('yearly rent: becomes a yearly item, spread over 12 months, with nothing extra until next year', () => {
+    const rent: Transaction = { id: 'r1', type: 'expense', amount: 3_000_000, category: 'Housing', note: 'Rent', date: '2026-01-05' };
+    const { data: d, added } = editTransaction({ ...empty(), transactions: [rent] }, 'r1', { ...rent, spread: 12 }, 12, {}, '2026-11-14');
+    expect(added).toBe(0);
+    expect(d.recurring[0]).toMatchObject({ everyMonths: 12, spreadMonths: 12, startMonth: '2026-01' });
+    expect(d.transactions[0]).toMatchObject({ spread: 12, recurringId: d.recurring[0].id });
+    expect(effectiveInMonth(d.transactions, '2026-11')[0].amount).toBe(250_000);
+  });
+
+  it('keeps the original currency on the new repeating item', () => {
+    const pay: Transaction = { id: 'p', type: 'income', amount: 7_400_000, category: 'Salary', note: 'Acme', date: '2026-11-01', original: { amount: 5000, currency: 'USD', rate: 1480 } };
+    const { data: d } = editTransaction({ ...empty(), transactions: [pay] }, 'p', pay, 1, {}, '2026-11-14');
+    expect(d.recurring[0]).toMatchObject({ amount: 5000, currency: 'USD', rate: 1480 });
+  });
+
+  describe('a payment made by a repeating item', () => {
+    const setUp = () => editTransaction({ ...empty(), transactions: [fuel] }, 'f1', fuel, 1, {}, '2026-11-14').data;
+
+    it('with "also change future payments", the item takes the new amount', () => {
+      const d0 = setUp();
+      const nov = d0.transactions[2];
+      const { data: d } = editTransaction(d0, nov.id, { ...nov, amount: 80_000 }, 1, { updateFuture: true }, '2026-11-14');
+      expect(d.transactions.find((t) => t.id === nov.id)?.amount).toBe(80_000);
+      expect(d.recurring[0].amount).toBe(80_000);
+      expect(d.transactions[0].amount).toBe(60_000); // past payments untouched
+      // December's payment uses the new amount.
+      const dec = applyRecurring(d, '2026-12-05').transactions.find((t) => t.date === '2026-12-05');
+      expect(dec?.amount).toBe(80_000);
+    });
+
+    it('without it, only that payment changes', () => {
+      const d0 = setUp();
+      const nov = d0.transactions[2];
+      const { data: d } = editTransaction(d0, nov.id, { ...nov, amount: 80_000 }, 1, { updateFuture: false }, '2026-11-14');
+      expect(d.recurring[0].amount).toBe(60_000);
+      expect(d.transactions.find((t) => t.id === nov.id)).toMatchObject({ amount: 80_000, recurringId: d.recurring[0].id });
+    });
+
+    it('setting it to not repeat stops the item and keeps every payment', () => {
+      const d0 = setUp();
+      const { data: d } = editTransaction(d0, 'f1', d0.transactions[0], 0, {}, '2026-11-14');
+      expect(d.recurring).toEqual([]);
+      expect(d.transactions).toHaveLength(3);
+      expect(d.transactions.every((t) => !t.recurringId)).toBe(true);
+    });
+
+    it('switching monthly to yearly changes the schedule', () => {
+      const d0 = setUp();
+      const { data: d } = editTransaction(d0, 'f1', d0.transactions[0], 12, {}, '2026-11-14');
+      expect(d.recurring[0].everyMonths).toBe(12);
+      expect(applyRecurring(d, '2027-08-01').transactions).toHaveLength(3); // nothing new until Sep 2027
+    });
+  });
+
+  it('an edited example becomes the user’s own entry', () => {
+    const d0 = data();
+    const ex = d0.transactions.find((t) => t.note === 'Eating out')!;
+    const { data: d } = editTransaction(d0, ex.id, { ...ex, amount: 99 }, 0, {}, '2026-11-14');
+    expect(d.transactions.find((t) => t.id === ex.id)).toMatchObject({ amount: 99 });
+    expect(d.transactions.find((t) => t.id === ex.id)?.sample).toBeUndefined();
+  });
+
+  it('can stop an older similar item it replaces', () => {
+    const d0 = data(); // has the example monthly "Rent"
+    const rent: Transaction = { id: 'r1', type: 'expense', amount: 3_000_000, category: 'Housing', note: 'Rent', date: '2026-01-05', spread: 12 };
+    const { data: d } = editTransaction({ ...d0, transactions: [...d0.transactions, rent] }, 'r1', rent, 12, { replaceRuleId: 'sample-rent' }, '2026-11-14');
+    expect(d.recurring.map((r) => r.id)).not.toContain('sample-rent');
+    expect(d.recurring.some((r) => r.everyMonths === 12 && r.note === 'Rent')).toBe(true);
+  });
+
+  it('ignores an unknown id', () => {
+    const d0 = empty();
+    expect(editTransaction(d0, 'nope', fuel, 1, {}, '2026-11-14')).toEqual({ data: d0, added: 0 });
   });
 });
 

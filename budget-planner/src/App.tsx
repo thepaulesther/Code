@@ -5,7 +5,8 @@ import { ExportDialog } from './components/ExportDialog';
 import { ImportDialog } from './components/ImportDialog';
 import { RecurringPanel } from './components/RecurringPanel';
 import { SettingsDialog } from './components/SettingsDialog';
-import { TransactionForm, type RepeatEvery } from './components/TransactionForm';
+import { Modal } from './components/Modal';
+import { TransactionForm, type RepeatEvery, type SubmitOptions } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
   budgetStatus,
@@ -28,7 +29,16 @@ import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
 import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
-import { applyRecurring, changeBaseCurrency, hasSamples, isEmpty, removeSamples, stopRule, useAppData } from './lib/store';
+import {
+  applyRecurring,
+  changeBaseCurrency,
+  editTransaction,
+  hasSamples,
+  isEmpty,
+  removeSamples,
+  stopRule,
+  useAppData,
+} from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
 
 const CURRENT_MONTH = monthOf(todayISO());
@@ -40,6 +50,7 @@ export default function App() {
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
   const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
   const install = useInstallPrompt();
@@ -74,7 +85,7 @@ export default function App() {
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
   const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
 
-  const add = (tx: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => {
+  const add = (tx: Transaction, repeatEvery: RepeatEvery, { replaceRuleId }: SubmitOptions) => {
     const replaced = replaceRuleId ? data.recurring.find((r) => r.id === replaceRuleId) : undefined;
     const replacedNote = replaced ? ` Stopped the old “${replaced.note || replaced.category}”.` : '';
     const spreadNote = tx.spread
@@ -122,6 +133,26 @@ export default function App() {
   };
 
   const remove = (id: string) => setData((d) => ({ ...d, transactions: d.transactions.filter((x) => x.id !== id) }));
+
+  const saveEdit = (tx: Transaction, repeatEvery: RepeatEvery, opts: SubmitOptions) => {
+    if (!editingId) return;
+    const before = data;
+    const wasLinked = data.transactions.find((x) => x.id === editingId)?.recurringId;
+    const { data: next, added } = editTransaction(data, editingId, tx, repeatEvery, opts, todayISO());
+    setData(next);
+    setEditingId(null);
+    setMonth(monthOf(tx.date));
+    const name = `“${tx.note || tx.category}”`;
+    let text = `Saved ${name}.`;
+    if (!wasLinked && repeatEvery) {
+      const how = repeatEvery === 12 ? `every year on ${shortDate(tx.date)}` : `on the ${ordinal(Number(tx.date.slice(8, 10)))} of every month`;
+      text = `${name} now repeats ${how}.` + (added ? ` Added ${added} ${added === 1 ? 'payment' : 'payments'} since then.` : '');
+    } else if (wasLinked && !repeatEvery) {
+      text = `${name} no longer repeats. Payments already recorded stay.`;
+    }
+    setToast(text, () => setData(before));
+  };
+  const editingTx = editingId ? transactions.find((x) => x.id === editingId) : undefined;
 
   const toggleRule = (id: string) => {
     const today = todayISO();
@@ -283,7 +314,7 @@ export default function App() {
               />
             </div>
 
-            <TransactionList transactions={monthTx} onDelete={remove} />
+            <TransactionList transactions={monthTx} onDelete={remove} onEdit={setEditingId} />
           </div>
 
           <aside className="col-side">
@@ -327,6 +358,22 @@ export default function App() {
           ratesStatus={ratesStatus}
           onRefreshRates={refreshRates}
         />
+        <Modal open={!!editingTx} onClose={() => setEditingId(null)} title="Edit transaction">
+          {editingTx && (
+            <TransactionForm
+              key={editingTx.id}
+              editing={editingTx}
+              expenseCategories={settings.expenseCategories}
+              incomeCategories={settings.incomeCategories}
+              rates={data.rates}
+              ratesStatus={ratesStatus}
+              onRefreshRates={refreshRates}
+              recurring={recurring}
+              onAdd={saveEdit}
+              onChooseBase={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
+            />
+          )}
+        </Modal>
         <ExportDialog
           open={dialog === 'export'}
           onClose={() => setDialog(null)}
