@@ -2,17 +2,19 @@ import { currencyName, shortDate } from '../lib/budget';
 import { allCurrencies, COMMON_CURRENCIES, formatRate, type RateCache, type RatesStatus } from '../lib/currency';
 
 /** Currency picker with common currencies first. `compact` shows codes only (for tight spaces). */
-export function CurrencySelect({ id, value, onChange, compact, label }: {
+export function CurrencySelect({ id, value, onChange, compact, label, placeholder = 'Choose a currency…' }: {
   id: string;
+  /** '' = none chosen yet; the placeholder is shown. */
   value: string;
   onChange: (code: string) => void;
   compact?: boolean;
   label?: string;
+  placeholder?: string;
 }) {
   const all = allCurrencies();
   const common = COMMON_CURRENCIES.filter((c) => all.includes(c));
   const rest = (compact ? [...all].sort() : all).filter((c) => !common.includes(c));
-  if (!all.includes(value) && !common.includes(value)) rest.unshift(value);
+  if (value && !all.includes(value) && !common.includes(value)) rest.unshift(value);
   const text = (c: string) => (compact ? c : `${currencyName(c)} (${c})`);
   return (
     <select
@@ -21,8 +23,13 @@ export function CurrencySelect({ id, value, onChange, compact, label }: {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={label}
-      title={compact ? currencyName(value) : undefined}
+      title={compact && value ? currencyName(value) : undefined}
     >
+      {!value && (
+        <option value="" disabled>
+          {compact ? '—' : placeholder}
+        </option>
+      )}
       <optgroup label="Common">
         {common.map((c) => (
           <option key={c} value={c}>{text(c)}</option>

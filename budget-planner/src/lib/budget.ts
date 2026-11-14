@@ -239,13 +239,24 @@ export function toCSV(txs: Transaction[]): string {
 
 const fmtCache = new Map<string, Intl.NumberFormat>();
 
+/** A plain number with no currency, used before the user has chosen one: 1,234.50 / 1.2K. */
+function plainFormat(compact?: boolean): Intl.NumberFormat {
+  return new Intl.NumberFormat(
+    undefined,
+    compact
+      ? { notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  );
+}
+
 /**
  * Format an amount. `narrow` (used for the base currency) prefers the local sign, e.g. ₦ rather than "NGN";
  * without it, foreign amounts keep the standard symbol so "$" isn't confused with another dollar.
+ * An empty `currency` (none chosen yet) formats a plain number.
  */
 export function formatMoney(
   n: number,
-  currency = 'USD',
+  currency = '',
   opts: { compact?: boolean; narrow?: boolean } = {},
 ): string {
   const key = `${currency}|${opts.compact ? 'c' : 's'}|${opts.narrow ? 'n' : ''}`;
@@ -253,14 +264,16 @@ export function formatMoney(
   if (!f) {
     const display = opts.narrow ? ({ currencyDisplay: 'narrowSymbol' } as const) : {};
     try {
-      f = new Intl.NumberFormat(
-        undefined,
-        opts.compact
-          ? { style: 'currency', currency, ...display, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
-          : { style: 'currency', currency, ...display },
-      );
+      f = !currency
+        ? plainFormat(opts.compact)
+        : new Intl.NumberFormat(
+            undefined,
+            opts.compact
+              ? { style: 'currency', currency, ...display, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+              : { style: 'currency', currency, ...display },
+          );
     } catch {
-      f = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+      f = plainFormat(opts.compact); // unknown code: show the number rather than a wrong symbol
     }
     fmtCache.set(key, f);
   }
@@ -268,6 +281,7 @@ export function formatMoney(
 }
 
 export function currencySymbol(currency: string): string {
+  if (!currency) return '';
   try {
     return (
       new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' })
@@ -280,6 +294,7 @@ export function currencySymbol(currency: string): string {
 }
 
 export function currencyName(currency: string): string {
+  if (!currency) return 'No currency';
   try {
     return new Intl.DisplayNames(undefined, { type: 'currency' }).of(currency) ?? currency;
   } catch {

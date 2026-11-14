@@ -27,7 +27,7 @@ const SPREAD_OPTIONS: [number, string][] = [
   [24, '24 months'],
 ];
 
-export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, recurring, onAdd }: {
+export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, recurring, onAdd, onChooseBase }: {
   expenseCategories: string[];
   incomeCategories: string[];
   rates?: RateCache;
@@ -36,6 +36,8 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   /** Existing repeating items, to offer replacing one (e.g. monthly rent -> yearly rent). */
   recurring: RecurringRule[];
   onAdd: (t: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => void;
+  /** Sets the base currency; offered here when none has been chosen yet. */
+  onChooseBase: (currency: string) => void;
 }) {
   const [keepOldFor, setKeepOldFor] = useState<string | null>(null); // rule id the user chose to keep
   const { money, currency: base } = useFormat();
@@ -71,6 +73,7 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (!base) return setError('Choose your currency first');
     if (value == null) return setError('Enter an amount greater than 0, like 42.50');
     if (foreign && rate == null) return setError(`Enter the exchange rate from ${currency} to ${base}`);
     if (!date) return setError('Pick a date');
@@ -106,6 +109,13 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
       <div className="card-head">
         <h2>Add transaction</h2>
       </div>
+      {!base && (
+        <div className="choose-base">
+          <label htmlFor="form-base-currency">First, choose the currency your totals are in</label>
+          <CurrencySelect id="form-base-currency" value="" onChange={onChooseBase} label="Base currency" />
+        </div>
+      )}
+      <fieldset className="tx-fields" disabled={!base}>
       <div className="segmented" role="radiogroup" aria-label="Transaction type">
         {(['expense', 'income'] as const).map((t) => (
           <button
@@ -252,6 +262,7 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
       <button type="submit" className="btn-primary">
         {repeat === 1 ? `Add monthly ${type}` : repeat === 12 ? `Add yearly ${type}` : `Add ${type}`}
       </button>
+      </fieldset>
     </form>
   );
 }

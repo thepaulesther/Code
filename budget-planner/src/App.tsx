@@ -188,7 +188,15 @@ export default function App() {
           </div>
           <div className="top-actions">
             {install && <button type="button" className="btn-ghost accent" onClick={install}>Install app</button>}
-            <button type="button" className="btn-ghost" onClick={() => setDialog('import')}>Import</button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setDialog('import')}
+              disabled={!settings.currency}
+              title={settings.currency ? undefined : 'Choose your currency first'}
+            >
+              Import
+            </button>
             <button type="button" className="btn-ghost" onClick={() => setDialog('export')} disabled={!transactions.length}>Export</button>
             <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
           </div>
@@ -287,6 +295,7 @@ export default function App() {
               onRefreshRates={refreshRates}
               recurring={recurring}
               onAdd={add}
+              onChooseBase={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
             />
             <RecurringPanel
               rules={recurring}

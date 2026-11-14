@@ -33,7 +33,7 @@ export interface AppData {
 const KEY = 'bp.data';
 
 export const defaultSettings = (): Settings => ({
-  currency: 'USD',
+  currency: '', // none until the user chooses one
   theme: 'system',
   expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
   incomeCategories: [...DEFAULT_INCOME_CATEGORIES],
@@ -115,7 +115,9 @@ export function loadData(): AppData {
   const oldTx = readJSON('bp.transactions');
   if (isTxArray(oldTx)) {
     const oldBudgets = readJSON('bp.budgets');
-    return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings: defaultSettings() };
+    // That version only worked in US dollars.
+    const settings = { ...defaultSettings(), currency: 'USD' };
+    return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings };
   }
 
   // First visit: start empty so every number on screen comes from the user's own entries.
@@ -153,7 +155,8 @@ export function emptyData(settings: Settings): AppData {
 export function changeBaseCurrency(d: AppData, newBase: string, mode: 'convert' | 'relabel', rate = 1): AppData {
   const oldBase = d.settings.currency;
   if (newBase === oldBase) return d;
-  const convert = mode === 'convert';
+  // Without a previous currency there's nothing to convert from: the numbers simply get a currency.
+  const convert = mode === 'convert' && !!oldBase;
 
   const transactions = d.transactions.map((t): Transaction => {
     if (t.original?.currency === newBase) {

@@ -353,6 +353,15 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .switch-panel p { margin: 0; }
 .switch-panel .head-actions { justify-content: flex-end; }
 .switch-panel .rate-field { padding-left: 26px; }
+.tx-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.tx-fields:disabled { opacity: 0.5; }
+.choose-base {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 550;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.choose-base select {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 14px; font-weight: 500;
+}
 .welcome {
   margin-bottom: 16px; padding: 16px 18px; border-radius: 14px;
   background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);

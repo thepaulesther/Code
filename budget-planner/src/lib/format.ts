@@ -7,7 +7,7 @@ export interface Prefs {
 }
 
 export const PrefsContext = createContext<Prefs>({
-  currency: 'USD',
+  currency: '',
   expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
 });
 

@@ -42,7 +42,8 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
   const choose = (c: string) => {
     setRateText(null);
     if (c === base) return setPending(null);
-    if (!hasData) {
+    // Nothing to convert (no data yet, or no currency before): just set it.
+    if (!hasData || !base) {
       setData((d) => changeBaseCurrency(d, c, 'relabel'));
       return setPending(null);
     }
@@ -68,10 +69,14 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
       <label className="field">
         <CurrencySelect id="set-currency" value={pending ?? base} onChange={choose} label="Base currency" />
       </label>
-      <p className="hint">
-        Totals, budgets and charts are in this currency ({formatMoney(1234.5, pending ?? base, { narrow: true })}). You can still enter
-        amounts in any currency, such as a salary paid in dollars; they’re converted to {currencyName(pending ?? base)} when added.
-      </p>
+      {pending ?? base ? (
+        <p className="hint">
+          Totals, budgets and charts are in this currency ({formatMoney(1234.5, pending ?? base, { narrow: true })}). You can still enter
+          amounts in any currency, such as a salary paid in dollars; they’re converted to {currencyName(pending ?? base)} when added.
+        </p>
+      ) : (
+        <p className="hint">No currency chosen yet. Pick the one your totals should be in before adding transactions.</p>
+      )}
 
       {pending && (
         <div className="switch-panel" role="group" aria-label={`Switch to ${pending}`}>

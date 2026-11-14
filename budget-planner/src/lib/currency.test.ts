@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { currencySymbol, formatMoney } from './budget';
 import { allCurrencies, conversionRate, parseRate, parseRatesResponse, rateForInput, round2, type RateCache } from './currency';
 
 const cache: RateCache = {
@@ -22,6 +23,19 @@ describe('conversionRate', () => {
     expect(conversionRate(undefined, 'NGN', 'NGN')).toBe(1);
     expect(conversionRate(undefined, 'USD', 'NGN')).toBeNull();
     expect(conversionRate(cache, 'XYZ', 'NGN')).toBeNull();
+  });
+});
+
+describe('formatMoney with no currency chosen', () => {
+  it('shows a plain number, no symbol', () => {
+    const plain = formatMoney(1234.5, '');
+    expect(plain).toBe((1234.5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    expect(plain).not.toMatch(/[$₦€£¥]|USD/);
+    expect(formatMoney(0, '', { narrow: true })).toBe((0).toLocaleString(undefined, { minimumFractionDigits: 2 }));
+    expect(currencySymbol('')).toBe('');
+  });
+  it('still formats real currencies', () => {
+    expect(formatMoney(5, 'NGN', { narrow: true })).toContain('₦');
   });
 });
 

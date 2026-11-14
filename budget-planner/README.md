@@ -26,7 +26,7 @@ A small, private budget planner. Track income and expenses, set monthly limits p
 - **Theme**: System, Light or Dark
 - **Installable PWA**: has a manifest, icons, and a service worker that caches the app for offline use
 
-The app starts **empty**, with a short welcome that asks for your currency, so every number comes from your own entries. Data saved by earlier versions may still include example entries: they carry an **example** badge, and a banner offers **Remove examples** (with Undo). To start completely fresh, use **Settings → Delete all data**.
+The app starts **empty** and with **no currency chosen**: amounts show as plain numbers until you pick one in the welcome card, the form or Settings, and adding or importing transactions waits until you do. Every number comes from your own entries. Data saved by earlier versions may still include example entries: they carry an **example** badge, and a banner offers **Remove examples** (with Undo). To start completely fresh, use **Settings → Delete all data**.
 
 When you add a repeating item that matches an existing one (say, a yearly “Rent” while a monthly “Rent” is still set up), the form offers to stop the old one. Stopping a repeating item from the Repeating panel can also delete the payments it added, with Undo.
 

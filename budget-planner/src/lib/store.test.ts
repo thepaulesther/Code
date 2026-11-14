@@ -17,7 +17,21 @@ import {
   type AppData,
 } from './store';
 
-const data = (): AppData => ({ version: 2, ...sampleData('2026-11'), settings: defaultSettings() });
+const data = (): AppData => ({ version: 2, ...sampleData('2026-11'), settings: { ...defaultSettings(), currency: 'USD' } });
+
+describe('no currency until the user picks one', () => {
+  it('defaults to none', () => {
+    expect(defaultSettings().currency).toBe('');
+  });
+  it('choosing a currency for unlabelled numbers just labels them, even in convert mode', () => {
+    const unlabelled: AppData = { ...data(), settings: defaultSettings() };
+    const d = changeBaseCurrency(unlabelled, 'NGN', 'convert', 1520);
+    expect(d.settings.currency).toBe('NGN');
+    expect(d.transactions).toEqual(unlabelled.transactions);
+    expect(d.budgets).toEqual(unlabelled.budgets);
+    expect(d.recurring).toEqual(unlabelled.recurring);
+  });
+});
 
 describe('example data clean-up (the “Housing shows the old rent too” problem)', () => {
   /** Example data as saved by the previous version: no `sample` flags, converted to Naira. */
