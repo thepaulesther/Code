@@ -22,9 +22,10 @@ export function sampleData() {
     const day = (d: number) => `${M}-${String(Math.min(d, m === 0 ? Math.max(1, today.getDate()) : 28)).padStart(2, '0')}`;
     const add = (type: string, amount: number, category: string, note: string, d: number) =>
       tx.push({ id: id(), type, amount, category, note, date: day(d) });
-    add('income', 4200, 'Salary', 'Acme Ltd salary', 1);
+    // Salary and rent repeat every month, as a user would set them up: payments made by the rules.
+    tx.push({ id: `r-salary:${M}`, type: 'income', amount: 4200, category: 'Salary', note: 'Acme Ltd salary', date: `${M}-01`, recurringId: 'r-salary' });
+    tx.push({ id: `r-rent:${M}`, type: 'expense', amount: 1350, category: 'Housing', note: 'Rent', date: `${M}-01`, recurringId: 'r-rent' });
     if (m % 2) add('income', 650, 'Freelance', 'Logo project', 9);
-    add('expense', 1350, 'Housing', 'Rent', 1);
     add('expense', 310 + m * 12, 'Groceries', 'Weekly shop', 4);
     add('expense', 86.4, 'Dining', 'Dinner with Sam', 6);
     add('expense', 142.1, 'Utilities', 'Power & broadband', 3);
@@ -36,7 +37,11 @@ export function sampleData() {
     version: 2,
     transactions: tx,
     budgets: { Groceries: 400, Dining: 150, Shopping: 250, Entertainment: 60 },
-    recurring: [{ id: 'r1', type: 'expense', amount: 12.99, category: 'Entertainment', note: 'Music subscription', day: 28, startMonth: ym(1) }],
+    recurring: [
+      { id: 'r-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Acme Ltd salary', day: 1, startMonth: ym(-5), lastGenerated: ym(0) },
+      { id: 'r-rent', type: 'expense', amount: 1350, category: 'Housing', note: 'Rent', day: 1, startMonth: ym(-5), lastGenerated: ym(0) },
+      { id: 'r1', type: 'expense', amount: 12.99, category: 'Entertainment', note: 'Music subscription', day: 28, startMonth: ym(1) },
+    ],
     goals: [
       { id: 'g1', name: 'Emergency fund', kind: 'emergency', target: 7500, contributions: [{ id: 'c1', date: `${ym(-2)}-10`, amount: 2600 }] },
       { id: 'g2', name: 'New car', kind: 'goal', target: 12000, targetMonth: ym(18), contributions: [{ id: 'c2', date: `${ym(-1)}-10`, amount: 1800 }] },

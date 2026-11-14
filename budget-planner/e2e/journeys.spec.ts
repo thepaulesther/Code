@@ -182,3 +182,63 @@ test('month comparisons stop at the same day while the month is running', async 
   await page.goto('/');
   await expect(page.locator('.hero-flow-delta').first()).toContainText('same day last month');
 });
+
+test('repeating bills: upcoming ones are shown, added on their day, and the balance reconciles with the plan', async ({ page }) => {
+  // The case reported in review: bills due later in the month seemed not to repeat, and the balance
+  // didn't match the plan's Left to spend.
+  await page.clock.install({ time: new Date('2026-11-14T10:00:00') });
+  await page.goto('/');
+  await page.selectOption('#welcome-currency', 'NGN');
+  const add = async (type: 'income' | 'expense', amount: number, category: string, note: string, date: string) => {
+    await openAdd(page, type);
+    await page.fill('#tx-amount', String(amount));
+    await page.selectOption('#tx-category', category);
+    await page.fill('#tx-note', note);
+    await page.fill('#tx-date', date);
+    await page.selectOption('#tx-repeat', '1');
+    await page.click('dialog[open] .form-submit button');
+  };
+  await add('income', 500000, 'Salary', 'Salary', '2026-11-01');
+  await add('expense', 150000, 'Housing', 'Rent', '2026-11-01');
+  await add('expense', 30000, 'Utilities', 'Electricity', '2026-11-20');
+  await add('expense', 10000, 'Utilities', 'Phone plan', '2026-11-28');
+  await openAdd(page, 'expense');
+  await page.fill('#tx-amount', '60000');
+  await page.selectOption('#tx-category', 'Groceries');
+  await page.click('dialog[open] .form-submit button');
+
+  // Upcoming bills are visible, and the hero shows what's still to pay.
+  await page.goto('/');
+  const coming = page.locator('.coming-up');
+  await expect(coming).toContainText('Electricity');
+  await expect(coming).toContainText('Phone plan');
+  await expect(page.locator('.hero-value')).toContainText('290,000');
+  await expect(page.locator('.hero-facts')).toContainText('Still to pay this month₦40,000');
+  await expect(page.locator('.hero-facts')).toContainText('250,000');
+
+  // The plan explains the gap line by line, and it adds up.
+  await page.goto('/#/plans');
+  const bridge = page.locator('.plan-bridge');
+  await expect(bridge).toContainText('Balance this month');
+  await expect(bridge).toContainText('290,000');
+  await expect(bridge).toContainText('Bills not yet paid');
+  await expect(bridge).toContainText('− ₦40,000');
+  await expect(bridge.locator('.plan-bridge-total')).toContainText('250,000');
+
+  // The app stays open into the 21st: electricity is added automatically within a minute, with no
+  // reload; only the phone bill is still to come.
+  await page.clock.setSystemTime(new Date('2026-11-21T10:00:00'));
+  await page.clock.runFor(61_000);
+  await page.goto('/#/transactions');
+  await expect(page.locator('.rows li', { hasText: 'Electricity' })).toBeVisible();
+  await expect(page.locator('.coming-up')).not.toContainText('Electricity');
+  await expect(page.locator('.coming-up')).toContainText('Phone plan');
+
+  // Still open into December: the app moves to the new month, and salary and rent repeat on the 1st.
+  await page.clock.setSystemTime(new Date('2026-12-02T10:00:00'));
+  await page.clock.runFor(61_000);
+  await page.goto('/#/transactions');
+  await expect(page.locator('.month-name')).toHaveText(/December 2026/);
+  await expect(page.locator('.rows li', { hasText: 'Salary' })).toBeVisible();
+  await expect(page.locator('.rows li', { hasText: 'Rent' })).toBeVisible();
+});

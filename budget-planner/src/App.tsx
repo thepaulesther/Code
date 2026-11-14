@@ -47,6 +47,7 @@ import {
   saveGoal,
   stopRule,
   useAppData,
+  useToday,
 } from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
@@ -63,6 +64,8 @@ import {
 } from './lib/plan';
 import { hrefFor, navigate, useRoute, type Route } from './lib/route';
 import { changeLabel, compareMonths } from './lib/compare';
+import { upcomingThisMonth } from './lib/reconcile';
+import { ComingUp } from './components/overview/ComingUp';
 import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
@@ -75,7 +78,6 @@ import { OverviewPreview, SetupGuide, type SetupStep } from './components/overvi
 import { useSetupPrefs } from './lib/setup';
 import { overviewInsights } from './lib/insights';
 
-const CURRENT_MONTH = monthOf(todayISO());
 
 const PHONE_QUERY = '(max-width: 599px)';
 function useIsPhone() {
@@ -124,6 +126,13 @@ export default function App({ initial, notice }: {
   notice?: string;
 }) {
   const [data, setData, saveStatus] = useAppData(initial);
+  // Today, kept current while the app stays open (it may be left open across a due date or a month end).
+  const today = useToday();
+  const CURRENT_MONTH = monthOf(today);
+  // When the date changes, add repeating payments that have come due.
+  useEffect(() => {
+    setData((d) => applyRecurring(d, today));
+  }, [today, setData]);
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
@@ -160,7 +169,7 @@ export default function App({ initial, notice }: {
   const monthTx = useMemo(() => effectiveInMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
   // Month-on-month changes stop at the same day while the month is still running.
-  const comparison = useMemo(() => compareMonths(transactions, month, todayISO()), [transactions, month]);
+  const comparison = useMemo(() => compareMonths(transactions, month, today), [transactions, month, today]);
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
@@ -177,12 +186,22 @@ export default function App({ initial, notice }: {
       recurring,
       goals,
       month: m,
-      today: todayISO(),
+      today,
       settings: planSettings,
       rateFor: (c) => conversionRate(data.rates, c, settings.currency),
     });
   const plan = planFor(month);
   const currentPlan = month === CURRENT_MONTH ? plan : planFor(CURRENT_MONTH);
+  // Repeating items still due later this month: added automatically on the day.
+  const upcoming = upcomingThisMonth(recurring, today, rateFor);
+  // If the month rolls over while the app is open on "this month", follow it to the new month.
+  const shownCurrent = useRef(CURRENT_MONTH);
+  useEffect(() => {
+    const previous = shownCurrent.current; // read now: the update below runs later
+    if (previous === CURRENT_MONTH) return;
+    setMonth((m) => (m === previous ? CURRENT_MONTH : m));
+    shownCurrent.current = CURRENT_MONTH;
+  }, [CURRENT_MONTH]);
   const alert = alertSettings.enabled && settings.currency ? alertFor(plan, money) : null;
   const currentAlert = alertSettings.enabled && settings.currency ? alertFor(currentPlan, money) : null;
 
@@ -644,6 +663,7 @@ export default function App({ initial, notice }: {
             <div className="section-grid">
               <div className="span-8">{txList}</div>
               <div className="span-4 stack">
+                {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
                 {recurringPanel}
                 <p className="fineprint">Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}</p>
               </div>
@@ -890,7 +910,8 @@ export default function App({ initial, notice }: {
                   )}
                 </div>
                 <div className="span-7">{trendCard(isPhone)}</div>
-                <div className="span-5">
+                <div className="span-5 stack">
+                  {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
                   <TransactionList
                     transactions={monthTx}
                     onDelete={remove}

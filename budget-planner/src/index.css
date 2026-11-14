@@ -1340,3 +1340,19 @@ a { color: var(--accent-text); }
 .snapshots { display: flex; flex-direction: column; gap: var(--space-2); }
 .snapshots h4 { margin: 0; font-size: var(--text-md); }
 .snapshots .hint { margin: 0; }
+
+/* ---- Plan: from balance to left to spend ---- */
+.plan-bridge { display: flex; flex-direction: column; gap: var(--space-2); }
+.plan-bridge h3 { font-size: var(--text-md); font-weight: 650; }
+.plan-bridge dl { margin: 0; display: flex; flex-direction: column; }
+.plan-bridge dl > div {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  padding: var(--space-2) 0; border-top: 1px solid var(--border); font-size: var(--text-base);
+}
+.plan-bridge dl > div:first-child { border-top: 0; }
+.plan-bridge dt { font-weight: 550; min-width: 0; }
+.plan-bridge dt small { display: block; font-weight: 400; color: var(--muted); font-size: var(--text-xs); }
+.plan-bridge dd { margin: 0; font-weight: 600; white-space: nowrap; }
+.plan-bridge .plan-bridge-total { border-top: 2px solid var(--border-strong); font-weight: 700; }
+.plan-bridge .plan-bridge-total dd { font-size: var(--text-md); font-weight: 700; }
+.coming-up .hint { margin-top: var(--space-2); }

@@ -526,3 +526,26 @@ export function useAppData(initial: AppData) {
 
   return [data, setData, status] as const;
 }
+
+/**
+ * Today's date (YYYY-MM-DD), kept current while the app stays open: checked every minute and whenever
+ * the window comes back into view, so a bill due today is added even if Elora was left open overnight.
+ */
+export function useToday(): string {
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => {
+    const check = () => setToday((prev) => {
+      const now = todayISO();
+      return now === prev ? prev : now;
+    });
+    const timer = window.setInterval(check, 60_000);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
+  return today;
+}

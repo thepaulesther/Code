@@ -2,6 +2,7 @@ import { monthLabel, type Totals } from '../../lib/budget';
 import { changeLabel, type MonthComparison } from '../../lib/compare';
 import { useFormat } from '../../lib/format';
 import type { Plan } from '../../lib/plan';
+import { reconcile } from '../../lib/reconcile';
 import { Icon } from '../ui/Icon';
 
 
@@ -29,6 +30,8 @@ export function BalanceHero({ month, isCurrentMonth, totals: t, comparison: c, p
       ? `You’ve kept ${money(t.net)} of the ${money(t.income)} recorded ${when}.`
       : `You’ve recorded ${money(-t.net)} more spending than income ${when}.`;
   const showPlan = isCurrentMonth && plan.income > 0 && plan.shortfall <= 0;
+  // Bills set aside but not paid yet: the main reason Left to spend is below the balance.
+  const bridge = reconcile(plan);
 
   return (
     <section className="hero" aria-labelledby="hero-label">
@@ -47,6 +50,12 @@ export function BalanceHero({ month, isCurrentMonth, totals: t, comparison: c, p
               <div>
                 <dt>Savings rate</dt>
                 <dd className="num">{Math.round(t.savingsRate * 100)}%</dd>
+              </div>
+            )}
+            {showPlan && bridge.billsNotYetPaid > 0 && (
+              <div>
+                <dt>Still to pay this month</dt>
+                <dd className="num">{money(bridge.billsNotYetPaid)}</dd>
               </div>
             )}
             {showPlan && (
