@@ -118,7 +118,7 @@ export function TrendChart({ data, selected, onSelect }: {
 
   return (
     <div ref={ref}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="trend" role="img" aria-label="Income and expenses by month">
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="trend" role="group" aria-label="Income and spending by month">
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="grid" />

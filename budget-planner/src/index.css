@@ -10,7 +10,8 @@
  *   --danger           over budget, over plan, destructive actions only
  *   --warn (ochre)     approaching a limit
  *
- * Contrast (checked, WCAG 2.2): --text 12:1, --muted 5.1:1 on cream, --accent 11.7:1 on white.
+ * Contrast (checked, WCAG 2.2): --text 12:1, --muted 5.1:1 on cream, --accent 11.7:1 on white,
+ * --danger 5:1 on the tinted panel (#F0EDE4).
  * The brief's #78847D is 3.6:1 on cream, so it is --subtle (icons, placeholders), never body text.
  * Sage #A8BBA6 is decorative on light surfaces (2:1) and only used as text on forest (5.7:1).
  *
@@ -57,7 +58,7 @@
   --accent-text: var(--forest-800);
   --income: #2f7a57;
   --expense: var(--text);
-  --danger: #b4513a;
+  --danger: #a8472f;
   --warn: #8f6410;
   --focus: var(--forest-600);
   --backdrop: rgb(16 47 41 / 0.42);
