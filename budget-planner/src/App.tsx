@@ -64,8 +64,17 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
 import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
 import { EmptyState } from './components/ui/EmptyState';
+import { BalanceHero } from './components/overview/BalanceHero';
+import { InsightsCard } from './components/overview/InsightsCard';
+import { QuickActions } from './components/overview/QuickActions';
+import { overviewInsights } from './lib/insights';
 
 const CURRENT_MONTH = monthOf(todayISO());
+
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+};
 
 const PAGE_TITLES: Record<Route, string> = {
   overview: 'Overview',
@@ -655,19 +664,100 @@ export default function App() {
         return (
           <>
             {/* ---- Overview ---- */}
-            <PageHeader title="Overview" actions={<>{monthSwitch}{addButton}</>} />
+            <PageHeader
+              eyebrow={new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+              title={greeting()}
+              subtitle={
+                isEmpty(data)
+                  ? 'Let’s set up your budget.'
+                  : `Here’s where your money stands for ${month === CURRENT_MONTH ? 'this month' : monthLabel(month)}.`
+              }
+              actions={<>{monthSwitch}{addButton}</>}
+            />
             {welcome}
             {sampleBanner}
             {alertBanner}
-            {stats}
-            <TransactionList
-              transactions={monthTx}
-              onDelete={remove}
-              onEdit={setEditingId}
-              recent={5}
-              title="Recent activity"
-              action={seeAll('transactions')}
+            <BalanceHero
+              month={month}
+              isCurrentMonth={month === CURRENT_MONTH}
+              totals={t}
+              previous={prev}
+              plan={plan}
+              hasData={monthTx.length > 0}
             />
+            <QuickActions
+              onExpense={() => setAdding('expense')}
+              onIncome={() => setAdding('income')}
+              onImport={() => setDialog('import')}
+              onGoal={() => setGoalDialog('new')}
+              hasCurrency={!!settings.currency}
+            />
+            <div className="section-grid">
+              <div className="span-6">
+                <BudgetPanel
+                  summary
+                  status={status}
+                  budgets={budgets}
+                  categories={settings.expenseCategories}
+                  onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
+                  action={status.length > 0 && seeAll('budgets')}
+                  onSetUp={() => navigate('budgets')}
+                />
+              </div>
+              <div className="span-6">
+                {settings.currency ? (
+                  <GoalsPanel
+                    summary
+                    goals={goals}
+                    allocations={currentPlan.goals}
+                    emergencyMonthly={currentPlan.emergency}
+                    emergencyMonths={planSettings.emergencyMonths}
+                    onDialog={setGoalDialog}
+                    onDelete={removeGoal}
+                    onAddMoney={addMoneyToGoal}
+                    action={goals.length > 0 && seeAll('savings', 'Manage')}
+                  />
+                ) : (
+                  <section className="card">
+                    <div className="card-head"><h2>Savings goals</h2></div>
+                    <EmptyState icon="savings" title="Goals start with a currency" compact>
+                      Choose your base currency in the welcome card, then add a goal.
+                    </EmptyState>
+                  </section>
+                )}
+              </div>
+              <div className="span-7">{trendCard}</div>
+              <div className="span-5">
+                <TransactionList
+                  transactions={monthTx}
+                  onDelete={remove}
+                  onEdit={setEditingId}
+                  recent={5}
+                  title="Recent activity"
+                  action={monthTx.length > 0 && seeAll('transactions')}
+                  emptyAction={
+                    <button type="button" className="btn-secondary sm" onClick={() => setAdding('expense')}>
+                      <Icon name="plus" size={16} /> Add transaction
+                    </button>
+                  }
+                />
+              </div>
+              <div className="span-12">
+                <InsightsCard
+                  insights={overviewInsights({
+                    totals: t,
+                    previous: prev,
+                    previousLabel: monthLabel(shiftMonth(month, -1)),
+                    plan,
+                    isCurrentMonth: month === CURRENT_MONTH,
+                    budgets: status,
+                    byCategory,
+                    money,
+                  })}
+                  action={seeAll('insights', 'More insights')}
+                />
+              </div>
+            </div>
             {/* ---- /Overview ---- */}
           </>
         );
