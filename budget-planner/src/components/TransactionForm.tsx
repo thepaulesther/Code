@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   currencySymbol,
   monthLabel,
@@ -15,6 +15,7 @@ import { conversionRate, parseRate, rateForInput, round2, type RateCache, type R
 import { useFormat } from '../lib/format';
 import { findSimilarRule, intervalOf, ordinal, type RecurringRule } from '../lib/recurring';
 import { CurrencySelect, RateField } from './CurrencyFields';
+import { Icon } from './ui/Icon';
 
 /** 0 = one-off, 1 = every month, 12 = every year. */
 export type RepeatEvery = 0 | 1 | 12;
@@ -81,6 +82,11 @@ export function TransactionForm({
   const [spread, setSpread] = useState(editing?.spread ?? 1);
   const [updateFuture, setUpdateFuture] = useState(true);
   const [error, setError] = useState('');
+  // On a short screen the message can sit out of view above the pinned button: bring it into view.
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [error]);
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
   // Fall back to the first category if the chosen one was renamed or deleted.
@@ -162,6 +168,7 @@ export function TransactionForm({
             className={type === t ? `is-on ${t}` : ''}
             onClick={() => switchType(t)}
           >
+            <Icon name={t === 'expense' ? 'arrow-out' : 'arrow-in'} size={17} />
             {t === 'expense' ? 'Expense' : 'Income'}
           </button>
         ))}
@@ -183,6 +190,7 @@ export function TransactionForm({
             <span aria-hidden>{currencySymbol(currency)}</span>
             <input
               id="tx-amount"
+              data-autofocus={bare || undefined}
               inputMode="decimal"
               placeholder="0.00"
               value={amount}
@@ -262,6 +270,12 @@ export function TransactionForm({
           </select>
         </label>
       </div>
+      {repeat === 0 && spread === 1 && (
+        <p className="form-note">
+          <strong>Repeats</strong> adds it for you on the same day each month or year.{' '}
+          <strong>Counts toward</strong> spreads one big payment, like yearly rent, across several months.
+        </p>
+      )}
       {(repeat > 0 || spread > 1) && day > 0 && (
         <p className="form-note">
           {spread > 1 && value != null && rate != null && (
@@ -314,7 +328,8 @@ export function TransactionForm({
           This stops “{linkedRule.note || linkedRule.category}” repeating. Payments already recorded stay.
         </p>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert" ref={errorRef}>{error}</p>}
+      <div className="form-submit">
       <button type="submit" className="btn-primary">
         {editing
           ? 'Save changes'
@@ -324,6 +339,7 @@ export function TransactionForm({
               ? `Add yearly ${type}`
               : `Add ${type}`}
       </button>
+      </div>
       </fieldset>
     </form>
   );

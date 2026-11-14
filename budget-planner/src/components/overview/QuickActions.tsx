@@ -20,7 +20,7 @@ export function QuickActions({ onExpense, onIncome, onImport, onGoal, hasCurrenc
 }) {
   const needs = hasCurrency ? undefined : 'Choose your currency first';
   return (
-    <section className="quick-actions" aria-label="Quick actions">
+    <section className="quick-actions" id="quick-actions" aria-label="Quick actions">
       <Action icon="arrow-out" label="Add expense" onClick={onExpense} primary />
       <Action icon="arrow-in" label="Add income" onClick={onIncome} />
       <Action icon="import" label="Import CSV" onClick={onImport} disabled={!hasCurrency} title={needs} />

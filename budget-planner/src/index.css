@@ -1208,3 +1208,29 @@ a { color: var(--accent-text); }
   .qa { min-height: 74px; }
   .card-hint { display: none; }
 }
+
+/* ---- Round 2: add-transaction sheet ---- */
+.segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.segmented button.is-on.expense { color: var(--text); }
+.amount-row .money-input { min-height: 52px; }
+.amount-row .money-input input { font-size: 22px; font-weight: 650; min-height: 50px; letter-spacing: -0.01em; }
+.amount-row .cur-compact { min-height: 52px; }
+.modal { overflow-y: auto; overscroll-behavior: contain; }
+/* Keep the submit button in reach, above the keyboard, when the form is taller than the sheet */
+.modal .form-submit {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 0 calc(-1 * var(--space-6)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6) var(--space-6);
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+@media (max-width: 599px) {
+  .modal .form-submit {
+    margin: 0 calc(-1 * var(--space-4)) calc(-1 * (var(--space-6) + var(--safe-bottom)));
+    padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
+  }
+  .modal .form-submit .btn-primary { min-height: 50px; font-size: var(--text-md); }
+}
+.menu-heading {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  margin: var(--space-2) 0 calc(-1 * var(--space-2)) var(--space-2);
+}
+.modal .privacy-note { padding: 0 var(--space-2); }

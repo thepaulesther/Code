@@ -361,6 +361,20 @@ export default function App() {
   const isPhone = useIsPhone();
   const [trendOpen, setTrendOpen] = useState(false);
 
+  // On the Overview the quick actions already offer "Add"; the floating button appears once they scroll away.
+  const [quickActionsVisible, setQuickActionsVisible] = useState(false);
+  const hasAnyTransactions = transactions.length > 0;
+  useEffect(() => {
+    const el = route === 'overview' ? document.getElementById('quick-actions') : null;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setQuickActionsVisible(false);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setQuickActionsVisible(e.isIntersecting), { rootMargin: '0px 0px -72px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [route, hasAnyTransactions]);
+
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
@@ -825,7 +839,7 @@ export default function App() {
           <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
         </Main>
         <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
-        {route !== 'settings' && <AddFab onClick={() => setAdding('expense')} />}
+        {route !== 'settings' && !quickActionsVisible && <AddFab onClick={() => setAdding('expense')} />}
 
         <MoreSheet
           open={moreOpen}

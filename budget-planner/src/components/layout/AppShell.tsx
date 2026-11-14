@@ -157,14 +157,22 @@ export function MoreSheet({ open, onClose, route, onImport, onExport, onInstall,
   };
   return (
     <Modal open={open} onClose={onClose} title="More">
+      <h3 className="menu-heading">Pages</h3>
       <ul className="menu-list">
         <MenuLink route="insights" current={route} icon="insights" label="Financial insights" hint="Trends, categories and savings rate" onPick={onClose} />
         <MenuLink route="plans" current={route} icon="plans" label="Financial plan" hint="What you can spend while saving" onPick={onClose} />
         <MenuLink route="settings" current={route} icon="settings" label="Settings" hint="Currency, categories, alerts, theme" onPick={onClose} />
+      </ul>
+      <h3 className="menu-heading">Your data</h3>
+      <ul className="menu-list">
         <MenuButton icon="import" label="Import CSV" hint={canImport ? 'From your bank or card' : 'Choose your currency first'} onClick={then(onImport)} disabled={!canImport} />
         <MenuButton icon="export" label="Export CSV" hint={canExport ? 'Back up or move your data' : 'Nothing to export yet'} onClick={then(onExport)} disabled={!canExport} />
         {onInstall && <MenuButton icon="download" label="Install app" hint="Add Elora to your home screen" onClick={then(onInstall)} />}
       </ul>
+      <p className="privacy-note">
+        <Icon name="lock" size={14} />
+        <span>Your data lives only in this browser. Clearing browser data or switching device removes it, so export a backup now and then.</span>
+      </p>
     </Modal>
   );
 }
