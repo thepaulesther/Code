@@ -43,6 +43,13 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
   const planLine = (g: Goal) => {
     const remaining = goalRemaining(g);
     if (remaining <= 0) return 'Reached. Well done!';
+    if (g.incomeShare) {
+      const pct = `${Math.round(g.incomeShare * 1000) / 10}% of income`;
+      const monthly = g.kind === 'emergency' ? emergencyMonthly : (allocations.find((x) => x.goal.id === g.id)?.monthly ?? 0);
+      return g.autoSave
+        ? `${pct} (about ${money(monthly)} a month), put aside automatically when income comes in.`
+        : `${pct}: about ${money(monthly)} a month.`;
+    }
     if (g.kind === 'emergency') {
       return g.targetMonth
         ? `Put aside ${money(emergencyMonthly)} a month to have it by ${monthLabel(g.targetMonth)}.`
@@ -77,6 +84,11 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
                   <span className="goal-name">
                     {g.name}
                     {g.kind === 'emergency' && <span className="badge">safety net</span>}
+                    {g.autoSave && g.incomeShare && (
+                      <span className="badge auto" title="Saved automatically from each income">
+                        auto {Math.round(g.incomeShare * 1000) / 10}%
+                      </span>
+                    )}
                     {g.targetMonth && <span className="goal-date">by {monthLabel(g.targetMonth, 'short')} {g.targetMonth.slice(0, 4)}</span>}
                   </span>
                   <span className="num goal-nums">
@@ -150,6 +162,9 @@ function GoalForm({ goal, emergencyTaken, suggestedEmergency, onSave }: {
   const [target, setTarget] = useState(goal ? String(goal.target) : '');
   const [targetMonth, setTargetMonth] = useState(goal?.targetMonth ?? '');
   const [saved, setSaved] = useState(goal ? String(goalSaved(goal)) : '');
+  const [mode, setMode] = useState<'plan' | 'share'>(goal?.incomeShare ? 'share' : 'plan');
+  const [sharePct, setSharePct] = useState(goal?.incomeShare ? String(Math.round(goal.incomeShare * 1000) / 10) : '20');
+  const [auto, setAuto] = useState(goal?.autoSave ?? true);
   const [error, setError] = useState('');
   const thisMonth = monthOf(todayISO());
 
@@ -167,14 +182,30 @@ function GoalForm({ goal, emergencyTaken, suggestedEmergency, onSave }: {
     const s = saved.trim() ? parseAmount(saved) : 0;
     if (saved.trim() && s == null && saved.trim() !== '0') return setError('Enter how much you’ve saved so far, or leave it empty.');
     if (targetMonth && targetMonth < thisMonth) return setError('Pick this month or a later one, or leave the date empty.');
+    const pct = Number(sharePct.replace(',', '.'));
+    if (mode === 'share' && !(pct > 0 && pct <= 90)) return setError('Enter a share of income between 1% and 90%, like 20.');
     const g: Goal = {
       id: goal?.id ?? newId(),
       name: name.trim(),
       kind,
       target: t,
-      contributions: goal?.contributions ?? [],
+      // Turning automatic saving off stops future amounts but keeps what was already put aside.
+      contributions: (goal?.contributions ?? []).map((c) => {
+        if (!c.txId || (mode === 'share' && auto)) return c;
+        const kept = { ...c, id: newId() };
+        delete kept.txId;
+        return kept;
+      }),
       ...(targetMonth ? { targetMonth } : {}),
     };
+    if (mode === 'share') {
+      g.incomeShare = pct / 100;
+      if (auto) {
+        g.autoSave = true;
+        // Start with this month's income (keep the original start if it was already on).
+        g.autoSince = goal?.autoSave && goal.autoSince ? goal.autoSince : `${thisMonth}-01`;
+      }
+    }
     const change = Math.round(((s ?? 0) - (goal ? goalSaved(goal) : 0)) * 100) / 100;
     onSave(g, change);
   };
@@ -227,13 +258,48 @@ function GoalForm({ goal, emergencyTaken, suggestedEmergency, onSave }: {
           </div>
         </label>
       </div>
-      <p className="hint">
-        {targetMonth
-          ? 'Ledgerly works out how much to put aside each month to have it by then.'
-          : kind === 'emergency'
-            ? 'Without a date, it’s built up over the months set in Settings (12 by default).'
-            : 'Without a date, it shares the part of your income set aside for savings (20% by default).'}
-      </p>
+      <fieldset className="save-mode">
+        <legend>How do you want to save?</legend>
+        <label className="check">
+          <input id="goal-mode-plan" type="radio" name="goal-mode" checked={mode === 'plan'} onChange={() => setMode('plan')} />
+          <span>
+            Let Ledgerly work it out
+            <small>
+              {targetMonth
+                ? 'It works out how much to put aside each month to have it by then.'
+                : kind === 'emergency'
+                  ? 'Without a date, it’s built up over the months set in Settings (12 by default).'
+                  : 'Without a date, it shares the part of your income set aside for savings (20% by default).'}
+            </small>
+          </span>
+        </label>
+        <label className="check">
+          <input id="goal-mode-share" type="radio" name="goal-mode" checked={mode === 'share'} onChange={() => setMode('share')} />
+          <span>
+            Save a share of my income
+            <small>The same percentage every month, until the goal is reached.</small>
+          </span>
+        </label>
+        {mode === 'share' && (
+          <div className="share-options">
+            <label className="share-pct" htmlFor="goal-share">
+              <input id="goal-share" inputMode="decimal" value={sharePct} onChange={(e) => setSharePct(e.target.value)} aria-label="Percentage of income" />
+              <span>% of income</span>
+            </label>
+            <label className="check">
+              <input id="goal-auto" type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+              <span>
+                Put it aside automatically when income comes in
+                <small>
+                  Each income you add from this month on puts {sharePct || '…'}% into this goal, e.g. a{' '}
+                  {money(500_000)} salary adds {money((500_000 * (Number(sharePct) || 0)) / 100)}. This records the
+                  saving; to move the money itself, set up a standing order at your bank for the same amount.
+                </small>
+              </span>
+            </label>
+          </div>
+        )}
+      </fieldset>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="modal-foot">
         <button type="submit" className="btn-primary sm">{goal ? 'Save changes' : 'Add goal'}</button>

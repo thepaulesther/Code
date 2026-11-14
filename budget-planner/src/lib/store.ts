@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
@@ -11,7 +11,7 @@ import {
   type TxType,
 } from './budget';
 import { conversionRate, round2, type RateCache } from './currency';
-import { DEFAULT_PLAN, type AlertLevel, type Goal, type PlanSettings } from './plan';
+import { DEFAULT_PLAN, syncAutoSavings, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
 import { readJSON, writeJSON } from './storage';
 
@@ -368,8 +368,21 @@ export function deleteCategory(d: AppData, type: TxType, name: string): AppData 
 
 /* ---------- Hook ---------- */
 
+/** Bring automatic goal savings (e.g. "20% of income to the emergency fund") in line with the transactions. */
+export function withAutoSavings(d: AppData): AppData {
+  if (!d.goals?.length) return d;
+  const goals = syncAutoSavings(d.goals, d.transactions);
+  return goals === d.goals ? d : { ...d, goals };
+}
+
 export function useAppData() {
-  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(), todayISO()));
+  const [data, setRaw] = useState<AppData>(() => withAutoSavings(applyRecurring(loadData(), todayISO())));
+
+  // Every change (adding, editing, deleting, importing, undo) keeps automatic savings in step.
+  const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
+    (update) => setRaw((d) => withAutoSavings(typeof update === 'function' ? update(d) : update)),
+    [],
+  );
 
   useEffect(() => writeJSON(KEY, data), [data]);
 
@@ -380,7 +393,7 @@ export function useAppData() {
     };
     document.addEventListener('visibilitychange', onShow);
     return () => document.removeEventListener('visibilitychange', onShow);
-  }, []);
+  }, [setData]);
 
   return [data, setData] as const;
 }

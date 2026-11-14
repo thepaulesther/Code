@@ -440,6 +440,19 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .goal-money input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .goal-money .error { flex-basis: 100%; }
 .goal-form { display: flex; flex-direction: column; gap: 12px; }
+.save-mode { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.save-mode legend { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 6px; padding: 0; }
+.share-options {
+  display: flex; flex-direction: column; gap: 10px; margin-left: 26px; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.share-pct { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 550; }
+.share-pct input {
+  width: 72px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  font-size: 15px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums;
+}
+.share-pct input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.badge.auto { color: var(--income); background: color-mix(in srgb, var(--income) 14%, transparent); }
 .goal-form .chips { flex-wrap: wrap; }
 .goal-form .hint { margin: 0; }
 

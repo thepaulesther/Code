@@ -10,6 +10,7 @@ import {
   goalRemaining,
   goalSaved,
   suggestedEmergencyTarget,
+  syncAutoSavings,
   type Goal,
 } from './plan';
 import type { RecurringRule } from './recurring';
@@ -128,6 +129,54 @@ describe('buildPlan', () => {
     const p = buildPlan({ transactions: income, recurring: [], goals: [], month: '2026-10', today: '2026-11-14', settings: DEFAULT_PLAN });
     expect(p.daysLeft).toBe(0);
     expect(p.perDay).toBe(0);
+  });
+});
+
+describe('saving a share of income (e.g. 20% to the emergency fund)', () => {
+  const fund20: Goal = { ...fund, incomeShare: 0.2, autoSave: true, autoSince: '2026-11-01' };
+
+  it('the plan reserves 20% of income for the fund instead of spreading it over 12 months', () => {
+    const p = plan([], [phone, fund20]);
+    expect(p.emergency).toBe(140_000); // 20% of the ₦700k average
+    expect(p.free).toBe(700_000 - 310_000 - 150_000 - 140_000);
+    expect(p.pct.emergency).toBeCloseTo(0.2, 5);
+  });
+
+  it('works for any goal, and never asks for more than is left', () => {
+    const almost: Goal = { ...phone, incomeShare: 0.2, contributions: [{ id: 'x', date: '2026-10-01', amount: 850_000 }] };
+    const p = plan([], [almost]);
+    expect(p.goals[0]).toMatchObject({ how: 'income-share', monthly: 50_000 });
+  });
+
+  it('records 20% of each income from the start date automatically', () => {
+    const [g] = syncAutoSavings([fund20], income);
+    // November: only the ₦500k salary so far -> ₦100k. Earlier months are before autoSince.
+    expect(g.contributions).toEqual([{ id: 'auto:e:' + income[3].id, date: '2026-11-01', amount: 100_000, txId: income[3].id }]);
+    expect(goalSaved(g)).toBe(100_000);
+  });
+
+  it('adds more as income comes in, follows edits and deletions, and is stable when nothing changed', () => {
+    const freelance = tx({ type: 'income', category: 'Freelance', amount: 200_000, date: '2026-11-15' });
+    let goals = syncAutoSavings([fund20], [...income, freelance]);
+    expect(goalSaved(goals[0])).toBe(140_000);
+    expect(syncAutoSavings(goals, [...income, freelance])).toBe(goals); // no change -> same array
+    goals = syncAutoSavings(goals, [...income, { ...freelance, amount: 300_000 }]);
+    expect(goalSaved(goals[0])).toBe(160_000);
+    goals = syncAutoSavings(goals, income); // freelance deleted
+    expect(goalSaved(goals[0])).toBe(100_000);
+  });
+
+  it('keeps money added by hand and stops at the target', () => {
+    const nearlyFull: Goal = { ...fund20, target: 1_200_000, contributions: [{ id: 'm', date: '2026-10-20', amount: 1_150_000 }] };
+    const [g] = syncAutoSavings([nearlyFull], income);
+    expect(g.contributions.map((c) => [c.amount, !!c.txId])).toEqual([[1_150_000, false], [50_000, true]]);
+    expect(goalSaved(g)).toBe(1_200_000);
+  });
+
+  it('does nothing when automatic saving is off, and removes earlier automatic amounts', () => {
+    const [on] = syncAutoSavings([fund20], income);
+    const [off] = syncAutoSavings([{ ...on, autoSave: false }], income);
+    expect(off.contributions).toEqual([]);
   });
 });
 

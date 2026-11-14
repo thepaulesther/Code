@@ -7,6 +7,8 @@ export interface Contribution {
   id: string;
   date: string; // YYYY-MM-DD
   amount: number; // base currency; negative = taken out
+  /** Added automatically from this income transaction (see `syncAutoSavings`). */
+  txId?: string;
 }
 
 export interface Goal {
@@ -18,6 +20,48 @@ export interface Goal {
   /** Month the money is needed by (YYYY-MM). Without one, the goal shares the general savings slice. */
   targetMonth?: string;
   contributions: Contribution[];
+  /** Save this share of income (0..1) each month, e.g. 0.2 for 20%. Takes priority over the date. */
+  incomeShare?: number;
+  /** With `incomeShare`: record that share of each income automatically as saved in this goal. */
+  autoSave?: boolean;
+  /** Income dated on or after this day (YYYY-MM-DD) is saved automatically. */
+  autoSince?: string;
+}
+
+const hasIncomeShare = (g: Goal) => !!g.incomeShare && g.incomeShare > 0;
+
+/**
+ * Keep automatic savings in step with income: for each goal set to save a share of income automatically,
+ * every income transaction since `autoSince` contributes that share, in date order, until the goal is full.
+ * Recomputed from scratch, so edited or deleted income is reflected. Money added by hand is left alone.
+ * Returns the same array when nothing changed.
+ */
+export function syncAutoSavings(goals: Goal[], transactions: Transaction[]): Goal[] {
+  let changed = false;
+  const next = goals.map((g) => {
+    const manual = g.contributions.filter((c) => !c.txId);
+    const auto: Contribution[] = [];
+    if (hasIncomeShare(g) && g.autoSave) {
+      let saved = manual.reduce((s, c) => s + c.amount, 0);
+      const incomes = transactions
+        .filter((t) => t.type === 'income' && (!g.autoSince || t.date >= g.autoSince))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+      for (const t of incomes) {
+        const room = round2(g.target - saved);
+        if (room <= 0) break;
+        const amount = Math.min(round2(t.amount * g.incomeShare!), room);
+        if (amount <= 0) continue;
+        auto.push({ id: `auto:${g.id}:${t.id}`, date: t.date, amount, txId: t.id });
+        saved += amount;
+      }
+    }
+    const before = g.contributions.filter((c) => c.txId);
+    if (before.length === auto.length && before.every((c, i) => c.id === auto[i].id && c.amount === auto[i].amount && c.date === auto[i].date))
+      return g;
+    changed = true;
+    return { ...g, contributions: [...manual, ...auto] };
+  });
+  return changed ? next : goals;
 }
 
 export const goalSaved = (g: Goal) => round2(g.contributions.reduce((s, c) => s + c.amount, 0));
@@ -94,8 +138,11 @@ export const DEFAULT_PLAN: PlanSettings = { savingsRate: 0.2, emergencyMonths: 1
 export interface GoalAllocation {
   goal: Goal;
   monthly: number;
-  /** "dated": needed to hit its date; "share": its part of the savings slice; "done": already reached. */
-  how: 'dated' | 'share' | 'done';
+  /**
+   * "income-share": a set share of income (e.g. 20%); "dated": needed to hit its date;
+   * "share": its part of the savings slice; "done": already reached.
+   */
+  how: 'income-share' | 'dated' | 'share' | 'done';
 }
 
 export interface Plan {
@@ -149,20 +196,33 @@ export function buildPlan(input: {
   // Goals: dated ones need a set amount; undated ones share what's left of the savings slice.
   const purchase = goals.filter((g) => g.kind === 'goal');
   const fund = goals.find((g) => g.kind === 'emergency');
-  const emergency = fund
-    ? round2(goalMonthlyNeed(fund, month) ?? goalRemaining(fund) / Math.max(1, settings.emergencyMonths))
-    : 0;
+  // A share of income (e.g. 20%) wins over a date; it stops once the goal is reached.
+  const shareOfIncome = (g: Goal) => round2(Math.min(goalRemaining(g), income * g.incomeShare!));
+  const emergency = !fund
+    ? 0
+    : hasIncomeShare(fund)
+      ? shareOfIncome(fund)
+      : round2(goalMonthlyNeed(fund, month) ?? goalRemaining(fund) / Math.max(1, settings.emergencyMonths));
   const allocations: GoalAllocation[] = [];
   let datedTotal = 0;
   for (const g of purchase) {
+    if (goalRemaining(g) <= 0) {
+      allocations.push({ goal: g, monthly: 0, how: 'done' });
+      continue;
+    }
+    if (hasIncomeShare(g)) {
+      const amount = shareOfIncome(g);
+      allocations.push({ goal: g, monthly: amount, how: 'income-share' });
+      datedTotal += amount;
+      continue;
+    }
     const need = goalMonthlyNeed(g, month);
-    if (need === 0) allocations.push({ goal: g, monthly: 0, how: 'done' });
-    else if (need != null) {
+    if (need != null) {
       allocations.push({ goal: g, monthly: need, how: 'dated' });
       datedTotal += need;
     }
   }
-  const undated = purchase.filter((g) => goalMonthlyNeed(g, month) == null);
+  const undated = purchase.filter((g) => goalRemaining(g) > 0 && !hasIncomeShare(g) && goalMonthlyNeed(g, month) == null);
   const pool = Math.max(0, income * settings.savingsRate - datedTotal - emergency);
   for (const g of undated) {
     const share = round2(Math.min(goalRemaining(g), pool / undated.length));
