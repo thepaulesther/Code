@@ -29,3 +29,20 @@ Probed `buildPlan` (`src/lib/plan.ts`) with controlled inputs (3 months of £3,0
 4. **Pages**: Transactions gets a category filter, visible active filters and Clear; repeating payments are marked with an icon; Budgets show limit, spent and remaining in words; Savings leads with total saved and shows remaining per goal; Insights includes the written insights next to its charts, with comparable category bars; Plan leads with *Left to spend*.
 5. **New users**: a five-step setup checklist (currency, income, spending, budgets, goal) with progress, skippable and dismissible; the empty dashboard sections stay out of the way until there is data.
 6. **Your data**: Settings explains that clearing browser data or changing device removes it, and offers Export there.
+
+## Results
+
+**Done:** all six plan items above. Calculations in `src/lib` are unchanged (no edits to `budget.ts`, `plan.ts`, `recurring.ts`, `store.ts`, `csv.ts` or `currency.ts`); the stored data shape and `bp.data` key are unchanged.
+
+**Also found:** Settings said "Use Export to back it up or move it to another device", but the CSV export holds transactions only (not budgets, goals, repeating items, categories or settings). The text now says so. A full backup would be a new feature, so it wasn't added.
+
+**Tests run:**
+- `npm run lint` clean; `npm test` 165/165; `npm run build` and `npm run build:artifact` succeed
+- Browser regression (Playwright, outside the repo): 72/72 checks on desktop and phone: setup guide, add/edit/delete/undo, filters and Clear, repeating items, budgets, goals, plan income, CSV import/export, theme, category rename, navigation, offline load via the service worker, delete all data
+- Layout sweep: 8 widths (375–1440) × 7 pages × light and dark = 112 renders: no sideways scrolling, clipped text, console errors or floating-button overlap
+- Add sheet at 375×667, 390×844, 430×932 and 375×380 (a stand-in for an open keyboard): amount focused, submit visible, sheet inside the viewport, validation shown
+- axe-core: no WCAG 2.2 A/AA violations in 36 scans (all pages, both themes, desktop and phone, new-user Overview, add sheet)
+
+**Not tested:** a real on-screen keyboard on iOS and Android devices (only a shortened viewport); live exchange rates (blocked in the test sandbox).
+
+**Open, needs a decision:** findings B and D above; whether to add a full backup (all data, not just transactions).

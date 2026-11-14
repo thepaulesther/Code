@@ -14,7 +14,7 @@ A calm, private money planner. Track income and expenses, set monthly limits per
 | **Plan** | The monthly plan and the bills that feed it |
 | **Settings** | Theme, base currency, plan and alerts, categories, your data |
 
-On desktop the pages are in a sidebar, on tablets in an icon rail, and on phones in a bottom tab bar (Overview, Transactions, Budgets, Savings, More) with a floating **+** for adding a transaction. Pages have their own address (`#/budgets`), so the back button works. The design system (colours, type, spacing, components) is described in [`docs/redesign/02-design-system.md`](docs/redesign/02-design-system.md).
+On desktop the pages are in a sidebar, on tablets in an icon rail, and on phones in a bottom tab bar (Overview, Transactions, Budgets, Savings, More) with a floating **+** for adding a transaction. Pages have their own address (`#/budgets`), so the back button works. The design system (colours, type, spacing, components) is described in [`docs/redesign/02-design-system.md`](docs/redesign/02-design-system.md), and the plan's figures are explained on the Plan page and in [`docs/redesign/03-review-round.md`](docs/redesign/03-review-round.md).
 
 "Balance" on the Overview is the month's income minus spending. Elora records what you enter; it doesn't connect to bank accounts, so it never shows an account balance.
 
@@ -44,12 +44,14 @@ On desktop the pages are in a sidebar, on tablets in an icon rail, and on phones
   - signed amounts, `(12.00)` and `1.234,56` formats
   - separate money-in and money-out columns
   - duplicates of what you already have, which it skips
-- **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates
+- **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates. It holds transactions only, not budgets, goals or settings
 - **Multi-currency**: pick a **base currency** from every ISO currency (Naira, Yen, Cedi and so on), which all totals, budgets and charts use. Any transaction can be entered in another currency. For example, a remote worker with a Naira base can record a $5,000 salary: the app suggests today's market rate, you can type the rate you actually got, and ₦ is added to your totals while the original "$5,000 @ 1,480" is kept.
   - Repeating items can be in a foreign currency; each month converts at the latest rate.
   - CSV import has an "Amounts are in" option for foreign-currency account statements.
   - Changing the base currency asks whether to **convert** existing data at a rate, or just **relabel** it.
   - Rates come from [ExchangeRate-API](https://www.exchangerate-api.com), falling back to [fawazahmed0/currency-api](https://github.com/fawazahmed0/exchange-api). They refresh at most every 12 hours. Only the rate list is downloaded, and none of your data is sent. When offline you type the rate yourself.
+- **Setup guide**: new users get a five-step checklist on the Overview (currency, income, spending, budgets, a goal). Every step after the first can be skipped; the guide can be hidden and shown again from Settings.
+- **Filters**: search, Expense/Income and a category filter on Transactions, with a Clear filters button
 - **Insights**: short notes on the Overview built from your own numbers: how much you can spend a day, budgets near or over the limit, your biggest category, the change from last month and your savings rate
 - **Theme**: System, Light or Dark
 - **Installable PWA**: has a manifest, icons, and a service worker that caches the app for offline use
