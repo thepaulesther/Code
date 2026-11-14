@@ -60,6 +60,7 @@ export function TransactionList({ transactions, onDelete }: {
               <div className="row-main">
                 <span className="row-title">
                   {t.note || t.category}
+                  {t.sample && <span className="badge example" title="Example data. Remove it with “Remove examples”">example</span>}
                   {t.recurringId && <span className="badge" title="Added by a repeating item">↻ repeats</span>}
                   {t.share && (
                     <span className="badge share" title={`This month’s share of a payment spread over ${t.share.of} months`}>

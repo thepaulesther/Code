@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sampleData } from './budget';
+import { effectiveInMonth, sampleData, spendingByCategory } from './budget';
+import { findSimilarRule } from './recurring';
 import {
   addCategory,
   applyRecurring,
@@ -7,12 +8,102 @@ import {
   changeBaseCurrency,
   defaultSettings,
   deleteCategory,
+  hasSamples,
   isAppData,
+  markLegacySamples,
+  removeSamples,
   renameCategory,
+  stopRule,
   type AppData,
 } from './store';
 
 const data = (): AppData => ({ version: 2, ...sampleData('2026-11'), settings: defaultSettings() });
+
+describe('example data clean-up (the “Housing shows the old rent too” problem)', () => {
+  /** Example data as saved by the previous version: no `sample` flags, converted to Naira. */
+  const legacy = (): AppData => {
+    const d = changeBaseCurrency(data(), 'NGN', 'convert', 1520);
+    const strip = <T extends { sample?: boolean }>(x: T): T => {
+      const y = { ...x };
+      delete y.sample;
+      return y;
+    };
+    return { ...d, transactions: d.transactions.map(strip), recurring: d.recurring.map(strip) };
+  };
+  /** What the user then added: yearly rent, plus their own groceries (on a different day than the example). */
+  const withUserData = (): AppData => {
+    const d = legacy();
+    const rule = { id: 'user-rent', type: 'expense' as const, amount: 3_000_000, category: 'Housing', note: 'Rent', day: 5, startMonth: '2026-01', everyMonths: 12, spreadMonths: 12, lastGenerated: '2026-01' };
+    return {
+      ...d,
+      recurring: [...d.recurring, rule],
+      transactions: [
+        ...d.transactions,
+        { id: 'user-rent:2026-01', type: 'expense', amount: 3_000_000, category: 'Housing', note: 'Rent', date: '2026-01-05', recurringId: 'user-rent', spread: 12 },
+        { id: 'u2', type: 'expense', amount: 45_000, category: 'Groceries', note: 'Weekly shops', date: '2026-11-07' },
+      ],
+    };
+  };
+
+  it('before clean-up, November Housing counts both the example rent and the yearly share', () => {
+    const housing = spendingByCategory(effectiveInMonth(withUserData().transactions, '2026-11')).find((c) => c.category === 'Housing');
+    expect(housing?.amount).toBe(2_204_000 + 250_000);
+  });
+
+  it('marks only the examples in older saved data', () => {
+    const d = markLegacySamples(withUserData());
+    expect(hasSamples(d)).toBe(true);
+    expect(d.recurring.find((r) => r.id === 'user-rent')?.sample).toBeUndefined();
+    expect(d.transactions.find((t) => t.id === 'user-rent:2026-01')?.sample).toBeUndefined();
+    expect(d.transactions.find((t) => t.id === 'u2')?.sample).toBeUndefined();
+    expect(d.transactions.filter((t) => t.sample)).toHaveLength(data().transactions.length);
+    expect(markLegacySamples(d)).toBe(d); // runs once
+  });
+
+  it('removing examples leaves the user’s rent: Housing is ₦250,000 a month', () => {
+    const { data: clean, transactions, repeating } = removeSamples(markLegacySamples(withUserData()));
+    expect(transactions).toBe(data().transactions.length);
+    expect(repeating).toBe(2);
+    expect(hasSamples(clean)).toBe(false);
+    expect(clean.recurring.map((r) => r.id)).toEqual(['user-rent']);
+    const nov = spendingByCategory(effectiveInMonth(clean.transactions, '2026-11'));
+    expect(nov).toEqual([{ category: 'Housing', amount: 250_000 }, { category: 'Groceries', amount: 45_000 }]);
+  });
+
+  it('new example data is flagged from the start, including what its rules add later', () => {
+    const d = applyRecurring(data(), '2026-12-03');
+    expect(d.transactions.every((t) => t.sample)).toBe(true);
+    expect(removeSamples(d).data.transactions).toEqual([]);
+  });
+});
+
+describe('stopRule', () => {
+  it('keeps past payments by default (and unlinks them)', () => {
+    const d = stopRule(data(), 'sample-rent', false);
+    expect(d.recurring.map((r) => r.id)).toEqual(['sample-salary']);
+    const rents = d.transactions.filter((t) => t.note === 'Rent');
+    expect(rents).toHaveLength(4);
+    expect(rents.every((t) => t.recurringId === undefined)).toBe(true);
+  });
+  it('can delete the payments it added', () => {
+    const d = stopRule(data(), 'sample-rent', true);
+    expect(d.transactions.some((t) => t.note === 'Rent')).toBe(false);
+    expect(d.transactions.some((t) => t.note === 'Paycheck')).toBe(true);
+  });
+});
+
+describe('findSimilarRule', () => {
+  const rules = data().recurring;
+  it('finds an existing repeating item for the same bill', () => {
+    expect(findSimilarRule(rules, { type: 'expense', category: 'Housing', note: 'rent ' })?.id).toBe('sample-rent');
+    expect(findSimilarRule(rules, { type: 'expense', category: 'Housing', note: '' })?.id).toBe('sample-rent');
+  });
+  it('ignores different notes, types and paused items', () => {
+    expect(findSimilarRule(rules, { type: 'expense', category: 'Housing', note: 'Generator diesel' })).toBeUndefined();
+    expect(findSimilarRule(rules, { type: 'income', category: 'Housing', note: 'Rent' })).toBeUndefined();
+    expect(findSimilarRule(rules.map((r) => ({ ...r, paused: true })), { type: 'expense', category: 'Housing', note: 'Rent' })).toBeUndefined();
+  });
+});
 
 describe('sample data + applyRecurring', () => {
   it('is valid and already up to date for its own month', () => {

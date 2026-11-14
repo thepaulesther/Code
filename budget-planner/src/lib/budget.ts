@@ -17,7 +17,19 @@ export interface Transaction {
    * E.g. ₦3,000,000 yearly rent with spread 12 counts as ₦250,000 a month.
    */
   spread?: number;
+  /** Part of the example data shown on first visit; "Remove examples" deletes these. */
+  sample?: boolean;
 }
+
+/** One-off example transactions: category, note and day of month (for recognising older saved examples). */
+export const SAMPLE_ONE_OFFS: [string, string, number][] = [
+  ['Groceries', 'Weekly shops', 6],
+  ['Dining', 'Eating out', 9],
+  ['Transport', 'Transit pass', 3],
+  ['Utilities', 'Power & internet', 12],
+  ['Entertainment', 'Streaming & cinema', 14],
+  ['Freelance', 'Side project', 10],
+];
 
 /** A transaction as it counts in one month: spread payments appear as their monthly share. */
 export interface Entry extends Transaction {
@@ -293,8 +305,8 @@ export function sampleData(month: string): {
 } {
   const d = (m: string, day: number) => `${m}-${String(day).padStart(2, '0')}`;
   const recurring: RecurringRule[] = [
-    { id: 'sample-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', day: 1, startMonth: shiftMonth(month, -3), lastGenerated: month },
-    { id: 'sample-rent', type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', day: 2, startMonth: shiftMonth(month, -3), lastGenerated: month },
+    { id: 'sample-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', day: 1, startMonth: shiftMonth(month, -3), lastGenerated: month, sample: true },
+    { id: 'sample-rent', type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', day: 2, startMonth: shiftMonth(month, -3), lastGenerated: month, sample: true },
   ];
   const transactions: Transaction[] = [];
   for (let i = 0; i < 4; i++) {
@@ -313,6 +325,7 @@ export function sampleData(month: string): {
     if (i % 2 === 0)
       transactions.push({ id: newId(), type: 'income', amount: 650, category: 'Freelance', note: 'Side project', date: d(m, 10) });
   }
+  for (const t of transactions) t.sample = true;
   return {
     transactions,
     budgets: { Groceries: 380, Dining: 150, Transport: 120, Entertainment: 100, Shopping: 200 },

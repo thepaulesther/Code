@@ -13,15 +13,22 @@ import {
 const fullDate = (date: string) =>
   new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
+export function RecurringPanel({ rules, rateFor, paymentCount, onToggle, onDelete }: {
   rules: RecurringRule[];
   /** Latest rate from a currency to the base currency, or null if unknown. */
   rateFor: (currency: string) => number | null;
+  /** How many transactions a repeating item has added so far. */
+  paymentCount: (id: string) => number;
   onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, deletePayments: boolean) => void;
 }) {
   const { money, color } = useFormat();
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [deletePayments, setDeletePayments] = useState(false);
+  const askStop = (id: string | null) => {
+    setConfirming(id);
+    setDeletePayments(false);
+  };
   const today = todayISO();
 
   const active = rules.filter((r) => !r.paused);
@@ -64,7 +71,10 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
               <li key={r.id} className={r.paused ? 'is-paused' : ''}>
                 <span className="dot" style={{ background: r.type === 'income' ? 'var(--income)' : color(r.category) }} />
                 <div className="row-main">
-                  <span className="row-title">{r.note || r.category}</span>
+                  <span className="row-title">
+                    {r.note || r.category}
+                    {r.sample && <span className="badge example">example</span>}
+                  </span>
                   <span className="row-sub">
                     {r.paused ? 'Paused' : `${schedule}${nextLabel ? ` · next ${nextLabel}` : ''}`}
                   </span>
@@ -79,18 +89,40 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
                 </div>
                 <div className="rec-actions">
                   {confirming === r.id ? (
-                    <>
-                      <button type="button" className="btn-ghost danger-solid" onClick={() => { onDelete(r.id); setConfirming(null); }}>
-                        Stop
-                      </button>
-                      <button type="button" className="btn-ghost" onClick={() => setConfirming(null)}>Keep</button>
-                    </>
+                    <div className="stop-confirm">
+                      {paymentCount(r.id) > 0 && (
+                        <label className="check inline">
+                          <input
+                            id={`stop-delete-${r.id}`}
+                            type="checkbox"
+                            checked={deletePayments}
+                            onChange={(e) => setDeletePayments(e.target.checked)}
+                          />
+                          <span>
+                            Also delete the {paymentCount(r.id)} {paymentCount(r.id) === 1 ? 'payment' : 'payments'} it added
+                          </span>
+                        </label>
+                      )}
+                      <div>
+                        <button
+                          type="button"
+                          className="btn-ghost danger-solid"
+                          onClick={() => {
+                            onDelete(r.id, deletePayments);
+                            askStop(null);
+                          }}
+                        >
+                          {deletePayments ? 'Stop and delete' : 'Stop'}
+                        </button>
+                        <button type="button" className="btn-ghost" onClick={() => askStop(null)}>Keep</button>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       <button type="button" className="btn-ghost" onClick={() => onToggle(r.id)}>
                         {r.paused ? 'Resume' : 'Pause'}
                       </button>
-                      <button type="button" className="btn-ghost" onClick={() => setConfirming(r.id)} aria-label={`Stop repeating ${r.note || r.category}`}>
+                      <button type="button" className="btn-ghost" onClick={() => askStop(r.id)} aria-label={`Stop repeating ${r.note || r.category}`}>
                         Stop
                       </button>
                     </>
@@ -101,7 +133,7 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
           })}
         </ul>
       )}
-      {confirming && <p className="hint">Stopping keeps the transactions already added.</p>}
+      {confirming && !deletePayments && <p className="hint">Stopping keeps the payments already added unless you tick the box.</p>}
     </section>
   );
 }

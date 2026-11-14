@@ -28,7 +28,7 @@ import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
 import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
-import { applyRecurring, useAppData } from './lib/store';
+import { applyRecurring, hasSamples, removeSamples, stopRule, useAppData } from './lib/store';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
@@ -39,7 +39,8 @@ export default function App() {
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
+  const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
   const install = useInstallPrompt();
   const online = useOnline();
   const { status: ratesStatus, refresh: refreshRates } = useRates(data.rates, setData, { online, disabled: IS_ARTIFACT });
@@ -53,7 +54,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4500);
+    const t = setTimeout(() => setToastState(null), toast.undo ? 8000 : 4500);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -72,7 +73,9 @@ export default function App() {
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
   const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
 
-  const add = (tx: Transaction, repeatEvery: RepeatEvery) => {
+  const add = (tx: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => {
+    const replaced = replaceRuleId ? data.recurring.find((r) => r.id === replaceRuleId) : undefined;
+    const replacedNote = replaced ? ` Stopped the old “${replaced.note || replaced.category}”.` : '';
     const spreadNote = tx.spread
       ? ` It counts as ${money(shareAmount(tx.amount, tx.spread, 0))} a month for ${tx.spread} months.`
       : '';
@@ -93,7 +96,11 @@ export default function App() {
       const backfilled = dueOccurrences(rule, today).length;
       // Payments added now use the rate just entered; later ones use the latest rate.
       const { created, rules } = materialize([rule], today, () => rule.rate ?? null);
-      setData((d) => ({ ...d, recurring: [...d.recurring, ...rules], transactions: [...d.transactions, ...created] }));
+      const before = data;
+      setData((d) => {
+        const base = replaceRuleId ? stopRule(d, replaceRuleId, false) : d;
+        return { ...base, recurring: [...base.recurring, ...rules], transactions: [...base.transactions, ...created] };
+      });
       const when = repeatEvery === 12 ? `every year on ${shortDate(tx.date)}` : `on the ${ordinal(rule.day)} of every month`;
       const unit = repeatEvery === 12 ? 'years' : 'months';
       setToast(
@@ -101,7 +108,10 @@ export default function App() {
           ? `Scheduled. The first one will be added on ${shortDate(tx.date)}.`
           : backfilled === 1
             ? `Added. It will repeat ${when}.`
-            : `Added ${backfilled} ${unit}, starting ${shortDate(tx.date)}. It will keep repeating ${when}.`) + spreadNote,
+            : `Added ${backfilled} ${unit}, starting ${shortDate(tx.date)}. It will keep repeating ${when}.`) +
+          spreadNote +
+          replacedNote,
+        replaced ? () => setData(before) : undefined,
       );
     } else {
       setData((d) => ({ ...d, transactions: [...d.transactions, tx] }));
@@ -122,12 +132,24 @@ export default function App() {
     );
   };
 
-  const deleteRule = (id: string) =>
-    setData((d) => ({
-      ...d,
-      recurring: d.recurring.filter((r) => r.id !== id),
-      transactions: d.transactions.map((tx) => (tx.recurringId === id ? { ...tx, recurringId: undefined } : tx)),
-    }));
+  const deleteRule = (id: string, deletePayments: boolean) => {
+    const before = data;
+    const rule = data.recurring.find((r) => r.id === id);
+    const count = data.transactions.filter((x) => x.recurringId === id).length;
+    setData((d) => stopRule(d, id, deletePayments));
+    const name = `“${rule?.note || rule?.category || 'item'}”`;
+    setToast(
+      deletePayments ? `Stopped ${name} and deleted ${count} ${count === 1 ? 'payment' : 'payments'}.` : `Stopped ${name}. Its past payments stay.`,
+      () => setData(before),
+    );
+  };
+
+  const removeExamples = () => {
+    const before = data;
+    const { data: clean, transactions: n, repeating: r } = removeSamples(data);
+    setData(clean);
+    setToast(`Removed ${n} example transactions and ${r} repeating examples.`, () => setData(before));
+  };
 
   const importTxs = (txs: Transaction[]) => {
     setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
@@ -170,6 +192,16 @@ export default function App() {
             <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
           </div>
         </header>
+
+        {hasSamples(data) && (
+          <div className="sample-banner" role="note">
+            <p>
+              <strong>You’re looking at example data.</strong> Items marked <span className="badge example">example</span>{' '}
+              (including a monthly rent and salary) are counted in your totals. Remove them once you’ve added your own.
+            </p>
+            <button type="button" className="btn-primary sm" onClick={removeExamples}>Remove examples</button>
+          </div>
+        )}
 
         <section className="stats">
           <div className="stat">
@@ -230,9 +262,16 @@ export default function App() {
               rates={data.rates}
               ratesStatus={ratesStatus}
               onRefreshRates={refreshRates}
+              recurring={recurring}
               onAdd={add}
             />
-            <RecurringPanel rules={recurring} rateFor={rateFor} onToggle={toggleRule} onDelete={deleteRule} />
+            <RecurringPanel
+              rules={recurring}
+              rateFor={rateFor}
+              paymentCount={(id) => transactions.filter((x) => x.recurringId === id).length}
+              onToggle={toggleRule}
+              onDelete={deleteRule}
+            />
             <p className="fineprint">
               Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}
             </p>
@@ -266,8 +305,20 @@ export default function App() {
 
         {toast && (
           <div className="toast" role="status">
-            {toast}
-            <button type="button" className="icon-btn" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
+            {toast.text}
+            {toast.undo && (
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  toast.undo?.();
+                  setToastState(null);
+                }}
+              >
+                Undo
+              </button>
+            )}
+            <button type="button" className="icon-btn" onClick={() => setToastState(null)} aria-label="Dismiss">×</button>
           </div>
         )}
       </div>

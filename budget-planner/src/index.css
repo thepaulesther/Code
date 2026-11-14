@@ -353,6 +353,21 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .switch-panel p { margin: 0; }
 .switch-panel .head-actions { justify-content: flex-end; }
 .switch-panel .rate-field { padding-left: 26px; }
+.badge.example { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.sample-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 12px 16px; border-radius: 12px; font-size: 14px;
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
+}
+.sample-banner p { margin: 0; flex: 1 1 320px; }
+.sample-banner .badge { margin-left: 0; }
+.replace-note { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.stop-confirm { display: flex; flex-direction: column; gap: 4px; }
+.stop-confirm .check.inline { font-size: 12px; margin-left: 8px; }
+.toast-action {
+  border: 0; background: none; color: inherit; font-weight: 700; cursor: pointer; padding: 4px 6px;
+  text-decoration: underline; text-underline-offset: 2px;
+}
 .badge.share { color: var(--muted); background: var(--surface-2); }
 .form-note { margin: -4px 0 0; font-size: 13px; color: var(--muted); }
 .form-note strong { color: var(--text); }

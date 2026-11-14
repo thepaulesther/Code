@@ -20,6 +20,8 @@ export interface RecurringRule {
   spreadMonths?: number;
   lastGenerated?: string; // YYYY-MM of the latest occurrence already turned into a transaction
   paused?: boolean;
+  /** Part of the example data; its transactions are examples too. */
+  sample?: boolean;
 }
 
 export const intervalOf = (rule: Pick<RecurringRule, 'everyMonths'>) =>
@@ -102,6 +104,7 @@ export function materialize(
         recurringId: r.id,
         ...(r.currency && rate ? { original: { amount: r.amount, currency: r.currency, rate } } : {}),
         ...(r.spreadMonths && r.spreadMonths > 1 ? { spread: r.spreadMonths } : {}),
+        ...(r.sample ? { sample: true } : {}),
       });
     }
     return { ...r, lastGenerated: monthOf(dates[dates.length - 1]), ...(rate ? { rate } : {}) };
@@ -124,6 +127,24 @@ export function resumeRule(rule: RecurringRule, today: string): RecurringRule {
   const resumed: RecurringRule = { ...rule, paused: false };
   if (last) resumed.lastGenerated = last;
   return resumed;
+}
+
+/**
+ * An active repeating item that looks like the same bill or income as `tx`: same type and category,
+ * and the same note when both have one. Used to offer "stop the old one" when adding a replacement.
+ */
+export function findSimilarRule(
+  rules: RecurringRule[],
+  tx: { type: TxType; category: string; note: string },
+): RecurringRule | undefined {
+  const note = tx.note.trim().toLowerCase();
+  return rules.find(
+    (r) =>
+      !r.paused &&
+      r.type === tx.type &&
+      r.category === tx.category &&
+      (!note || !r.note.trim() || r.note.trim().toLowerCase() === note),
+  );
 }
 
 export function ordinal(n: number): string {

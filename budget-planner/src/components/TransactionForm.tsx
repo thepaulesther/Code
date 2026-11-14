@@ -13,7 +13,7 @@ import {
 } from '../lib/budget';
 import { conversionRate, parseRate, rateForInput, round2, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
-import { ordinal } from '../lib/recurring';
+import { findSimilarRule, intervalOf, ordinal, type RecurringRule } from '../lib/recurring';
 import { CurrencySelect, RateField } from './CurrencyFields';
 
 /** 0 = one-off, 1 = every month, 12 = every year. */
@@ -27,14 +27,17 @@ const SPREAD_OPTIONS: [number, string][] = [
   [24, '24 months'],
 ];
 
-export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, onAdd }: {
+export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, recurring, onAdd }: {
   expenseCategories: string[];
   incomeCategories: string[];
   rates?: RateCache;
   ratesStatus: RatesStatus;
   onRefreshRates: (() => void) | null;
-  onAdd: (t: Transaction, repeatEvery: RepeatEvery) => void;
+  /** Existing repeating items, to offer replacing one (e.g. monthly rent -> yearly rent). */
+  recurring: RecurringRule[];
+  onAdd: (t: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => void;
 }) {
+  const [keepOldFor, setKeepOldFor] = useState<string | null>(null); // rule id the user chose to keep
   const { money, currency: base } = useFormat();
   const [type, setType] = useState<TxType>('expense');
   const [amount, setAmount] = useState('');
@@ -57,6 +60,8 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   const shownRate = rateText ?? (foreign && suggested ? rateForInput(suggested) : '');
   const rate = foreign ? parseRate(shownRate) : 1;
   const value = parseAmount(amount);
+  const similar = repeat > 0 && current ? findSimilarRule(recurring, { type, category: current, note }) : undefined;
+  const replaceOld = !!similar && keepOldFor !== similar.id;
 
   const switchType = (t: TxType) => {
     setType(t);
@@ -83,7 +88,9 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
         ...(spread > 1 ? { spread } : {}),
       },
       repeat,
+      replaceOld ? similar?.id : undefined,
     );
+    setKeepOldFor(null);
     setAmount('');
     setNote('');
     setRepeat(0);
@@ -223,6 +230,23 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
           {repeat === 12 && <>Repeats every year on {shortDate(date)}. </>}
           {repeat > 0 && foreign && `Later payments convert at the latest ${currency} rate.`}
         </p>
+      )}
+      {similar && (
+        <label className="check replace-note">
+          <input
+            id="tx-replace"
+            type="checkbox"
+            checked={replaceOld}
+            onChange={(e) => setKeepOldFor(e.target.checked ? null : similar.id)}
+          />
+          <span>
+            Stop the existing repeating “{similar.note || similar.category}”
+            <small>
+              It’s still set to {intervalOf(similar) === 12 ? 'every year' : 'every month'}
+              {similar.sample ? ' (example data)' : ''}. Untick to keep both. Past payments stay.
+            </small>
+          </span>
+        </label>
       )}
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" className="btn-primary">

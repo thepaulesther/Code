@@ -3,6 +3,7 @@ import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
   monthOf,
+  SAMPLE_ONE_OFFS,
   sampleData,
   todayISO,
   type Budgets,
@@ -60,9 +61,57 @@ export function isAppData(v: unknown): v is AppData {
   );
 }
 
+/**
+ * Data saved before examples were flagged: mark the example rent/salary (ids start with "sample-") and
+ * the example one-offs (matching note and day) so "Remove examples" can find them. The user's own
+ * entries are never matched: anything created by one of their repeating items is skipped.
+ */
+export function markLegacySamples(d: AppData): AppData {
+  const hasLegacy = d.recurring.some((r) => r.id.startsWith('sample-') && !r.sample);
+  if (!hasLegacy) return d;
+  const oneOff = new Set(SAMPLE_ONE_OFFS.map(([, note, day]) => `${note}|${day}`));
+  const isSample = (t: Transaction) =>
+    t.id.startsWith('sample-') ||
+    (!t.recurringId && !t.spread && oneOff.has(`${t.note}|${Number(t.date.slice(8, 10))}`));
+  return {
+    ...d,
+    recurring: d.recurring.map((r) => (r.id.startsWith('sample-') ? { ...r, sample: true } : r)),
+    transactions: d.transactions.map((t) => (isSample(t) ? { ...t, sample: true } : t)),
+  };
+}
+
+export const hasSamples = (d: AppData) => d.transactions.some((t) => t.sample) || d.recurring.some((r) => r.sample);
+
+/** Delete the example transactions and repeating items. The user's own entries and budgets stay. */
+export function removeSamples(d: AppData): { data: AppData; transactions: number; repeating: number } {
+  const transactions = d.transactions.filter((t) => !t.sample);
+  const recurring = d.recurring.filter((r) => !r.sample);
+  return {
+    data: { ...d, transactions, recurring },
+    transactions: d.transactions.length - transactions.length,
+    repeating: d.recurring.length - recurring.length,
+  };
+}
+
+/** Stop a repeating item. Its past payments stay unless `deletePayments` is set. */
+export function stopRule(d: AppData, id: string, deletePayments: boolean): AppData {
+  return {
+    ...d,
+    recurring: d.recurring.filter((r) => r.id !== id),
+    transactions: deletePayments
+      ? d.transactions.filter((t) => t.recurringId !== id)
+      : d.transactions.map((t) => {
+          if (t.recurringId !== id) return t;
+          const rest = { ...t };
+          delete rest.recurringId;
+          return rest;
+        }),
+  };
+}
+
 export function loadData(today: string): AppData {
   const saved = readJSON(KEY);
-  if (isAppData(saved)) return { ...saved, settings: { ...defaultSettings(), ...saved.settings } };
+  if (isAppData(saved)) return markLegacySamples({ ...saved, settings: { ...defaultSettings(), ...saved.settings } });
 
   // Migrate from the first version, which stored two separate keys.
   const oldTx = readJSON('bp.transactions');
