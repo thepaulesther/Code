@@ -27,14 +27,25 @@ export function TransactionList({ transactions, onDelete, onEdit, recent, title 
   const { money, color } = useFormat();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('');
+  const categories = useMemo(() => [...new Set(transactions.map((t) => t.category))].sort(), [transactions]);
+  // A category chosen in another month may not exist in this one: ignore it rather than show nothing.
+  const activeCategory = categories.includes(category) ? category : '';
+  const filtered = filter !== 'all' || !!activeCategory || !!query.trim();
+  const clearFilters = () => {
+    setFilter('all');
+    setCategory('');
+    setQuery('');
+  };
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return transactions
       .filter((t) => filter === 'all' || t.type === filter)
+      .filter((t) => !activeCategory || t.category === activeCategory)
       .filter((t) => !q || t.note.toLowerCase().includes(q) || t.category.toLowerCase().includes(q))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, filter, query]);
+  }, [transactions, filter, query, activeCategory]);
   const shown = recent ? rows.slice(0, recent) : rows;
 
   return (
@@ -58,6 +69,18 @@ export function TransactionList({ transactions, onDelete, onEdit, recent, title 
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search transactions"
         />
+        <select
+          id="tx-category-filter"
+          className="filter-select"
+          value={activeCategory}
+          onChange={(e) => setCategory(e.target.value)}
+          aria-label="Filter by category"
+        >
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
         <div className="chips">
           {(['all', 'expense', 'income'] as const).map((f) => (
             <button key={f} type="button" className={filter === f ? 'chip is-on' : 'chip'} aria-pressed={filter === f} onClick={() => setFilter(f)}>
@@ -67,13 +90,30 @@ export function TransactionList({ transactions, onDelete, onEdit, recent, title 
         </div>
       </div>
       )}
+      {!recent && filtered && rows.length > 0 && (
+        <div className="active-filters" role="status">
+          <span>
+            Showing {rows.length} of {transactions.length}
+            {filter !== 'all' && <> · {filter === 'income' ? 'Income' : 'Expenses'}</>}
+            {activeCategory && <> · {activeCategory}</>}
+            {query.trim() && <> · “{query.trim()}”</>}
+          </span>
+          <button type="button" className="btn-ghost sm" onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
       {transactions.length === 0 ? (
         <EmptyState icon="transactions" title="No transactions this month" action={emptyAction}>
           Add your income and spending, or import a CSV from your bank, and they’ll appear here.
         </EmptyState>
       ) : rows.length === 0 ? (
-        <EmptyState icon="transactions" title="Nothing matches" compact>
-          Try another search, or switch the filter back to All.
+        <EmptyState
+          icon="transactions"
+          title="Nothing matches these filters"
+          compact
+          action={<button type="button" className="btn-secondary sm" onClick={clearFilters}>Clear filters</button>}
+        >
+          No {filter === 'income' ? 'income' : filter === 'expense' ? 'expenses' : 'transactions'}
+          {activeCategory ? ` in ${activeCategory}` : ''}{query.trim() ? ` matching “${query.trim()}”` : ''} this month.
         </EmptyState>
       ) : (
         <ul className={recent ? 'rows compact' : 'rows'}>
@@ -90,7 +130,11 @@ export function TransactionList({ transactions, onDelete, onEdit, recent, title 
                 <span className="row-title">
                   {t.note || t.category}
                   {t.sample && <span className="badge example" title="Example data. Remove it with “Remove examples”">example</span>}
-                  {t.recurringId && <span className="badge" title="Added by a repeating item">↻ repeats</span>}
+                  {t.recurringId && (
+                    <span className="badge repeat" title="Added automatically by a repeating item">
+                      <Icon name="repeat" size={12} /> Repeats
+                    </span>
+                  )}
                   {t.share && (
                     <span className="badge share" title={`This month’s share of a payment spread over ${t.share.of} months`}>
                       {t.share.index} of {t.share.of}

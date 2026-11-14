@@ -66,7 +66,12 @@ export function SpendingDonut({ data }: { data: Slice[] }) {
             className={active === d.category ? 'is-active' : ''}
           >
             <span className="swatch" style={{ background: color(d.category) }} />
-            <span className="legend-name">{d.category}</span>
+            <span className="legend-name">
+              {d.category}
+              <span className="legend-bar" aria-hidden>
+                <i style={{ width: `${(d.amount / data[0].amount) * 100}%`, background: color(d.category) }} />
+              </span>
+            </span>
             <span className="legend-pct">{Math.round((d.amount / total) * 100)}%</span>
             <span className="legend-amt num">{money(d.amount)}</span>
           </li>

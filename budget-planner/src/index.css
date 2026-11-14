@@ -1234,3 +1234,33 @@ a { color: var(--accent-text); }
   margin: var(--space-2) 0 calc(-1 * var(--space-2)) var(--space-2);
 }
 .modal .privacy-note { padding: 0 var(--space-2); }
+
+/* ---- Round 2: transactions ---- */
+.badge { display: inline-flex; align-items: center; gap: 3px; }
+.badge .icon { display: inline-block; }
+.list-tools .filter-select {
+  flex: 0 1 190px; min-height: var(--control-h); padding: 0 34px 0 var(--space-3); border-radius: var(--radius-sm);
+  background-color: var(--surface); border: 1px solid var(--border-strong); color: var(--text); font-size: var(--text-base);
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378847d' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.list-tools .filter-select:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent); }
+.active-filters {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); border-radius: var(--radius-sm);
+  background: var(--surface-sage); font-size: var(--text-sm); color: var(--text);
+}
+@media (max-width: 599px) {
+  .list-tools .filter-select { flex: 1 1 100%; }
+}
+
+/* ---- Round 2: insights + savings ---- */
+.legend li { align-items: start; }
+.legend .swatch { margin-top: 6px; }
+.legend-name { display: flex; flex-direction: column; gap: 5px; white-space: normal; }
+.legend-bar { display: block; height: 4px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
+.legend-bar i { display: block; height: 100%; border-radius: var(--radius-full); }
+.stat.lead { background: var(--surface-sage); border-color: color-mix(in srgb, var(--accent) 14%, var(--border)); box-shadow: none; }
+.stat.lead .stat-value { font-size: var(--text-3xl); }
+@media (max-width: 599px) { .stat.lead .stat-value { font-size: var(--text-2xl); } }

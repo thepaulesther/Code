@@ -494,6 +494,16 @@ export default function App() {
     </section>
   );
 
+  const insightList = overviewInsights({
+    totals: t,
+    previous: prev,
+    previousLabel: monthLabel(shiftMonth(month, -1)),
+    plan,
+    isCurrentMonth: month === CURRENT_MONTH,
+    budgets: status,
+    byCategory,
+    money,
+  });
   const selTrend = trend.find((x) => x.month === month);
   const trendHead = (
     <div className="card-head">
@@ -625,7 +635,7 @@ export default function App() {
               <>
                 {goals.length > 0 && (
                   <section className="summary-tiles" aria-label="Savings summary">
-                    <div className="stat">
+                    <div className="stat lead">
                       <span className="stat-label">Saved so far</span>
                       <span className="stat-value num">{money(totalSaved)}</span>
                       <span className="stat-sub">of {money(totalTarget)} across {goals.length} {goals.length === 1 ? 'goal' : 'goals'}</span>
@@ -668,6 +678,9 @@ export default function App() {
             {alertBanner}
             {stats}
             <div className="section-grid">
+              <div className="span-12">
+                <InsightsCard insights={insightList} title={`What stands out in ${monthLabel(month)}`} />
+              </div>
               <div className="span-7">{trendCard()}</div>
               <div className="span-5">{donutCard}</div>
             </div>
@@ -807,16 +820,7 @@ export default function App() {
               </div>
               <div className="span-12">
                 <InsightsCard
-                  insights={overviewInsights({
-                    totals: t,
-                    previous: prev,
-                    previousLabel: monthLabel(shiftMonth(month, -1)),
-                    plan,
-                    isCurrentMonth: month === CURRENT_MONTH,
-                    budgets: status,
-                    byCategory,
-                    money,
-                  })}
+                  insights={insightList}
                   action={seeAll('insights', 'More insights')}
                 />
               </div>

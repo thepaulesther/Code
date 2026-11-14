@@ -3,11 +3,11 @@ import type { Insight } from '../../lib/insights';
 import { EmptyState } from '../ui/EmptyState';
 import { Icon } from '../ui/Icon';
 
-export function InsightsCard({ insights, action }: { insights: Insight[]; action?: ReactNode }) {
+export function InsightsCard({ insights, action, title = 'Insights' }: { insights: Insight[]; action?: ReactNode; title?: string }) {
   return (
     <section className="card">
       <div className="card-head">
-        <h2>Insights</h2>
+        <h2>{title}</h2>
         {action}
       </div>
       {insights.length === 0 ? (
