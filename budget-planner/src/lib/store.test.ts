@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { effectiveInMonth, sampleData, spendingByCategory, type Transaction } from './budget';
+import { goalSaved } from './plan';
 import { findSimilarRule } from './recurring';
 import {
   addCategory,
+  addToGoal,
+  alertSettingsOf,
+  deleteGoal,
+  planSettingsOf,
+  saveGoal,
   applyRecurring,
   categoryNameError,
   changeBaseCurrency,
@@ -89,6 +95,28 @@ describe('example data clean-up (the “Housing shows the old rent too” proble
     const d = applyRecurring(data(), '2026-12-03');
     expect(d.transactions.every((t) => t.sample)).toBe(true);
     expect(removeSamples(d).data.transactions).toEqual([]);
+  });
+});
+
+describe('goals in the store', () => {
+  it('adds, updates, pays into and deletes goals; old data without goals works', () => {
+    let d: AppData = data(); // no `goals` key, like data saved before goals existed
+    expect(d.goals).toBeUndefined();
+    d = saveGoal(d, { id: 'car', name: 'Car', kind: 'goal', target: 8_000_000, targetMonth: '2027-12', contributions: [] });
+    d = addToGoal(d, 'car', 500_000, '2026-11-14');
+    d = addToGoal(d, 'car', -100_000, '2026-11-20');
+    expect(goalSaved(d.goals![0])).toBe(400_000);
+    d = saveGoal(d, { ...d.goals![0], target: 9_000_000 });
+    expect(d.goals).toHaveLength(1);
+    expect(d.goals![0].target).toBe(9_000_000);
+    expect(d.goals![0].contributions).toHaveLength(2);
+    d = deleteGoal(d, 'car');
+    expect(d.goals).toEqual([]);
+  });
+  it('plan and alert settings fall back to defaults', () => {
+    expect(planSettingsOf(defaultSettings())).toEqual({ savingsRate: 0.2, emergencyMonths: 12 });
+    expect(alertSettingsOf(defaultSettings())).toEqual({ enabled: true, sound: true, notify: false });
+    expect(planSettingsOf({ ...defaultSettings(), plan: { savingsRate: 0.3, emergencyMonths: 6, income: 700_000 } }).income).toBe(700_000);
   });
 });
 

@@ -11,16 +11,30 @@ import {
   type TxType,
 } from './budget';
 import { conversionRate, round2, type RateCache } from './currency';
+import { DEFAULT_PLAN, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
 import { readJSON, writeJSON } from './storage';
 
 export type Theme = 'system' | 'light' | 'dark';
+
+export interface AlertSettings {
+  /** Show warnings when spending passes income or the plan. */
+  enabled: boolean;
+  /** Play a short alarm sound when a new warning appears. */
+  sound: boolean;
+  /** Also send a system notification (phone or desktop), if the browser allows it. */
+  notify: boolean;
+}
+
+export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true, notify: false };
 
 export interface Settings {
   currency: string;
   theme: Theme;
   expenseCategories: string[];
   incomeCategories: string[];
+  plan?: PlanSettings;
+  alerts?: AlertSettings;
 }
 
 export interface AppData {
@@ -30,6 +44,36 @@ export interface AppData {
   recurring: RecurringRule[];
   settings: Settings;
   rates?: RateCache;
+  /** Savings goals and the emergency fund. */
+  goals?: Goal[];
+  /** The most serious alert already raised per month (YYYY-MM), so each one sounds only once. */
+  alertLog?: Record<string, AlertLevel>;
+}
+
+export const planSettingsOf = (s: Settings): PlanSettings => ({ ...DEFAULT_PLAN, ...s.plan });
+export const alertSettingsOf = (s: Settings): AlertSettings => ({ ...DEFAULT_ALERTS, ...s.alerts });
+
+/* ---------- Goals ---------- */
+
+/** Add a new goal or replace an existing one with the same id. */
+export function saveGoal(d: AppData, goal: Goal): AppData {
+  const goals = d.goals ?? [];
+  return {
+    ...d,
+    goals: goals.some((g) => g.id === goal.id) ? goals.map((g) => (g.id === goal.id ? goal : g)) : [...goals, goal],
+  };
+}
+
+export const deleteGoal = (d: AppData, id: string): AppData => ({ ...d, goals: (d.goals ?? []).filter((g) => g.id !== id) });
+
+/** Put money into a goal (or take it out, with a negative amount). */
+export function addToGoal(d: AppData, id: string, amount: number, date: string): AppData {
+  return {
+    ...d,
+    goals: (d.goals ?? []).map((g) =>
+      g.id === id ? { ...g, contributions: [...g.contributions, { id: newId(), date, amount }] } : g,
+    ),
+  };
 }
 
 const KEY = 'bp.data';
@@ -229,7 +273,7 @@ export function applyRecurring(data: AppData, today: string): AppData {
 }
 
 export function emptyData(settings: Settings): AppData {
-  return { version: 2, transactions: [], budgets: {}, recurring: [], settings };
+  return { version: 2, transactions: [], budgets: {}, recurring: [], goals: [], settings };
 }
 
 /* ---------- Base currency ---------- */

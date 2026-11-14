@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BudgetPanel } from './components/BudgetPanel';
 import { SpendingDonut, TrendChart } from './components/Charts';
 import { ExportDialog } from './components/ExportDialog';
@@ -35,11 +35,27 @@ import {
   editTransaction,
   hasSamples,
   isEmpty,
+  addToGoal,
+  alertSettingsOf,
+  deleteGoal,
+  planSettingsOf,
   removeSamples,
+  saveGoal,
   stopRule,
   useAppData,
 } from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
+import { GoalsPanel } from './components/GoalsPanel';
+import { PlanCard } from './components/PlanCard';
+import { playAlarm, sendNotification } from './lib/alarm';
+import {
+  ALERT_RANK,
+  alertFor,
+  buildPlan,
+  suggestedEmergencyTarget,
+  type Goal,
+  type PlanSettings,
+} from './lib/plan';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
@@ -84,6 +100,81 @@ export default function App() {
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
   const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
+
+  // ---- Monthly plan, goals and alerts ----
+  const goals = useMemo(() => data.goals ?? [], [data.goals]);
+  const planSettings = planSettingsOf(settings);
+  const alertSettings = alertSettingsOf(settings);
+  const [goalDialog, setGoalDialog] = useState<Goal | 'new' | null>(null);
+  const planFor = (m: string) =>
+    buildPlan({
+      transactions,
+      recurring,
+      goals,
+      month: m,
+      today: todayISO(),
+      settings: planSettings,
+      rateFor: (c) => conversionRate(data.rates, c, settings.currency),
+    });
+  const plan = planFor(month);
+  const currentPlan = month === CURRENT_MONTH ? plan : planFor(CURRENT_MONTH);
+  const alert = alertSettings.enabled && settings.currency ? alertFor(plan, money) : null;
+  const currentAlert = alertSettings.enabled && settings.currency ? alertFor(currentPlan, money) : null;
+
+  // Sound the alarm (and notify) once each time this month's warning gets worse, not on every render or reload.
+  const loggedLevel = data.alertLog?.[CURRENT_MONTH];
+  const firstRun = useRef(true);
+  useEffect(() => {
+    const isFirst = firstRun.current;
+    firstRun.current = false;
+    if (!currentAlert) {
+      // Back on track: forget the alert so it sounds again if spending crosses the line again.
+      if (loggedLevel)
+        setData((d) => {
+          const log = { ...d.alertLog };
+          delete log[CURRENT_MONTH];
+          return { ...d, alertLog: log };
+        });
+      return;
+    }
+    if (loggedLevel && ALERT_RANK[loggedLevel] > ALERT_RANK[currentAlert.level]) {
+      // It eased off (e.g. a big expense was deleted): remember the lower level so a new rise sounds again.
+      setData((d) => ({ ...d, alertLog: { ...d.alertLog, [CURRENT_MONTH]: currentAlert.level } }));
+      return;
+    }
+    if (loggedLevel === currentAlert.level) return;
+    setData((d) => ({ ...d, alertLog: { ...d.alertLog, [CURRENT_MONTH]: currentAlert.level } }));
+    if (isFirst) return; // already like this when the app opened: show it, don't sound it
+    if (alertSettings.sound) playAlarm(currentAlert.level);
+    if (alertSettings.notify) sendNotification(currentAlert.title, currentAlert.detail);
+  }, [currentAlert?.level, loggedLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveGoalAndMoney = (g: Goal, savedChange: number) => {
+    const isNew = !goals.some((x) => x.id === g.id);
+    setData((d) => {
+      let next = saveGoal(d, g);
+      if (savedChange) next = addToGoal(next, g.id, savedChange, todayISO());
+      return next;
+    });
+    setToast(isNew ? `Added “${g.name}”. It’s now part of your monthly plan.` : `Saved “${g.name}”.`);
+  };
+  const addMoneyToGoal = (id: string, amount: number) => {
+    const before = data;
+    const g = goals.find((x) => x.id === id);
+    setData((d) => addToGoal(d, id, amount, todayISO()));
+    setToast(
+      amount > 0 ? `Added ${money(amount)} to “${g?.name}”.` : `Took ${money(-amount)} out of “${g?.name}”.`,
+      () => setData(before),
+    );
+  };
+  const removeGoal = (id: string) => {
+    const before = data;
+    const g = goals.find((x) => x.id === id);
+    setData((d) => deleteGoal(d, id));
+    setToast(`Deleted “${g?.name}”.`, () => setData(before));
+  };
+  const setPlanSettings = (patch: Partial<PlanSettings>) =>
+    setData((d) => ({ ...d, settings: { ...d.settings, plan: { ...planSettingsOf(d.settings), ...patch } } }));
 
   const add = (tx: Transaction, repeatEvery: RepeatEvery, { replaceRuleId }: SubmitOptions) => {
     const replaced = replaceRuleId ? data.recurring.find((r) => r.id === replaceRuleId) : undefined;
@@ -265,6 +356,19 @@ export default function App() {
           </div>
         )}
 
+        {alert && (
+          <div className={`alert-banner level-${alert.level}`} role="alert">
+            <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden className="alert-icon">
+              <path d="M10 2 1.5 17h17z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M10 8v4M10 14.5v.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <div>
+              <strong>{alert.title}</strong>
+              <p>{alert.detail}</p>
+            </div>
+          </div>
+        )}
+
         <section className="stats">
           <div className="stat">
             <span className="stat-label">Income</span>
@@ -290,6 +394,17 @@ export default function App() {
 
         <main className="grid">
           <div className="col-main">
+            {settings.currency && (
+              <PlanCard
+                plan={plan}
+                month={month}
+                isCurrentMonth={month === CURRENT_MONTH}
+                expectedIncome={planSettings.income}
+                onSetIncome={(income) => setPlanSettings({ income })}
+                onAddGoal={() => setGoalDialog('new')}
+                hasGoals={goals.length > 0}
+              />
+            )}
             <section className="card">
               <div className="card-head">
                 <h2>Last 6 months</h2>
@@ -313,6 +428,21 @@ export default function App() {
                 onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
               />
             </div>
+
+            {settings.currency && (
+              <GoalsPanel
+                goals={goals}
+                allocations={plan.goals}
+                emergencyMonthly={plan.emergency}
+                emergencyMonths={planSettings.emergencyMonths}
+                suggestedEmergency={suggestedEmergencyTarget(transactions, CURRENT_MONTH)}
+                dialogOpen={goalDialog}
+                onDialog={setGoalDialog}
+                onSave={saveGoalAndMoney}
+                onDelete={removeGoal}
+                onAddMoney={addMoneyToGoal}
+              />
+            )}
 
             <TransactionList transactions={monthTx} onDelete={remove} onEdit={setEditingId} />
           </div>
