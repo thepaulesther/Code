@@ -82,11 +82,17 @@ export function TransactionForm({
   const [spread, setSpread] = useState(editing?.spread ?? 1);
   const [updateFuture, setUpdateFuture] = useState(true);
   const [error, setError] = useState('');
-  // On a short screen the message can sit out of view above the pinned button: bring it into view.
+  // On a short screen the message can sit out of view above the pinned button: bring it into view,
+  // every time submitting fails (even with the same message).
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const [failures, setFailures] = useState(0);
+  const fail = (message: string) => {
+    setError(message);
+    setFailures((n) => n + 1);
+  };
   useEffect(() => {
-    if (error) errorRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [error]);
+    if (failures) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [failures]);
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
   // Fall back to the first category if the chosen one was renamed or deleted.
@@ -112,11 +118,11 @@ export function TransactionForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!base) return setError('Choose your currency first');
-    if (value == null) return setError('Enter an amount greater than 0, like 42.50');
-    if (foreign && rate == null) return setError(`Enter the exchange rate from ${currency} to ${base}`);
-    if (!date) return setError('Pick a date');
-    if (!current) return setError('Add a category in Settings first');
+    if (!base) return fail('Choose your currency first');
+    if (value == null) return fail('Enter an amount greater than 0, like 42.50');
+    if (foreign && rate == null) return fail(`Enter the exchange rate from ${currency} to ${base}`);
+    if (!date) return fail('Pick a date');
+    if (!current) return fail('Add a category in Settings first');
     const r = rate ?? 1;
     onAdd(
       {

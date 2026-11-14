@@ -58,6 +58,7 @@ import {
   type PlanSettings,
 } from './lib/plan';
 import { hrefFor, navigate, useRoute, type Route } from './lib/route';
+import { changeLabel, compareMonths } from './lib/compare';
 import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
@@ -149,7 +150,8 @@ export default function App() {
   // What counts this month: its own transactions plus this month's share of spread payments (yearly rent).
   const monthTx = useMemo(() => effectiveInMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
-  const prev = useMemo(() => totals(effectiveInMonth(transactions, shiftMonth(month, -1))), [transactions, month]);
+  // Month-on-month changes stop at the same day while the month is still running.
+  const comparison = useMemo(() => compareMonths(transactions, month, todayISO()), [transactions, month]);
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
@@ -340,20 +342,15 @@ export default function App() {
     setToast(`Imported ${txs.length} ${txs.length === 1 ? 'transaction' : 'transactions'}.`);
   };
 
-  const delta = (now: number, before: number) => {
-    if (before === 0) return null;
-    const pct = ((now - before) / before) * 100;
-    return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}% vs last month`;
-  };
+  const delta = (key: 'income' | 'expense') => changeLabel(comparison.now[key], comparison.before[key], comparison.partial);
 
   // Each page starts at the top, moves focus to its heading (for screen readers) and names the tab.
-  const firstRoute = useRef(true);
+  // Comparing with the previous route (not a "first run" flag) keeps StrictMode's double effect harmless.
+  const prevRoute = useRef(route);
   useEffect(() => {
     document.title = route === 'overview' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
-    if (firstRoute.current) {
-      firstRoute.current = false;
-      return;
-    }
+    if (prevRoute.current === route) return;
+    prevRoute.current = route;
     window.scrollTo(0, 0);
     document.getElementById('page-title')?.focus({ preventScroll: true });
   }, [route]);
@@ -362,19 +359,6 @@ export default function App() {
   const isPhone = useIsPhone();
   const [trendOpen, setTrendOpen] = useState(false);
 
-  // On the Overview the quick actions already offer "Add"; the floating button appears once they scroll away.
-  const [quickActionsVisible, setQuickActionsVisible] = useState(false);
-  const hasAnyTransactions = transactions.length > 0;
-  useEffect(() => {
-    const el = route === 'overview' ? document.getElementById('quick-actions') : null;
-    if (!el || typeof IntersectionObserver === 'undefined') {
-      setQuickActionsVisible(false);
-      return;
-    }
-    const io = new IntersectionObserver(([e]) => setQuickActionsVisible(e.isIntersecting), { rootMargin: '0px 0px -72px 0px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [route, hasAnyTransactions]);
 
   const setup = useSetupPrefs();
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
@@ -463,6 +447,20 @@ export default function App() {
     <SetupGuide steps={setupSteps} skipped={setup.prefs.skipped} onSkip={setup.skip} onUnskip={setup.unskip} onHide={setup.hide} />
   );
 
+  // On the Overview the quick actions already offer "Add"; the floating button appears once they scroll away.
+  const [quickActionsVisible, setQuickActionsVisible] = useState(false);
+  const hasAnyTransactions = transactions.length > 0;
+  useEffect(() => {
+    const el = route === 'overview' ? document.getElementById('quick-actions') : null;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setQuickActionsVisible(false);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setQuickActionsVisible(e.isIntersecting), { rootMargin: '0px 0px -72px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [route, hasAnyTransactions, showSetup]);
+
   const sampleBanner = hasSamples(data) && (
     <div className="sample-banner" role="note">
       <p>
@@ -500,12 +498,12 @@ export default function App() {
       <div className="stat">
         <span className="stat-label">Income</span>
         <span className="stat-value num income">{money(t.income)}</span>
-        <span className="stat-sub">{delta(t.income, prev.income) ?? ' '}</span>
+        <span className="stat-sub">{delta('income') ?? ' '}</span>
       </div>
       <div className="stat">
         <span className="stat-label">Spending</span>
         <span className="stat-value num">{money(t.expense)}</span>
-        <span className="stat-sub">{delta(t.expense, prev.expense) ?? ' '}</span>
+        <span className="stat-sub">{delta('expense') ?? ' '}</span>
       </div>
       <div className="stat">
         <span className="stat-label">Net</span>
@@ -522,7 +520,7 @@ export default function App() {
 
   const insightList = overviewInsights({
     totals: t,
-    previous: prev,
+    comparison,
     previousLabel: monthLabel(shiftMonth(month, -1)),
     plan,
     isCurrentMonth: month === CURRENT_MONTH,
@@ -673,7 +671,7 @@ export default function App() {
                     </div>
                     <div className="stat">
                       <span className="stat-label">Progress</span>
-                      <span className="stat-value num">{totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0}%</span>
+                      <span className="stat-value num">{totalTarget > 0 ? Math.round((goals.reduce((s, g) => s + Math.min(goalSaved(g), g.target), 0) / totalTarget) * 100) : 0}%</span>
                       <span className="stat-sub">of everything you’re saving for</span>
                     </div>
                   </section>
@@ -751,7 +749,10 @@ export default function App() {
           <>
             <PageHeader title="Settings" subtitle="Appearance, currency, plan and alerts, categories and your data." />
             <SettingsPanel
-              onReset={() => navigate('overview')}
+              onReset={() => {
+                setup.reset();
+                navigate('overview');
+              }}
               onExport={() => setDialog('export')}
               canExport={transactions.length > 0}
               setupHidden={setup.prefs.hidden}
@@ -805,7 +806,7 @@ export default function App() {
                 month={month}
                 isCurrentMonth={month === CURRENT_MONTH}
                 totals={t}
-                previous={prev}
+                comparison={comparison}
                 plan={plan}
                 hasData={monthTx.length > 0}
                 planHref={hrefFor('plans')}

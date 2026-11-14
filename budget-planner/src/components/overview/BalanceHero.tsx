@@ -1,23 +1,20 @@
 import { monthLabel, type Totals } from '../../lib/budget';
+import { changeLabel, type MonthComparison } from '../../lib/compare';
 import { useFormat } from '../../lib/format';
 import type { Plan } from '../../lib/plan';
 import { Icon } from '../ui/Icon';
 
-const change = (now: number, before: number) => {
-  if (before === 0) return null;
-  const pct = ((now - before) / before) * 100;
-  return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}% vs last month`;
-};
 
 /**
  * The Overview's primary element: this month's balance (income minus spending). Elora records cash
  * flow rather than bank balances, so the label says exactly what the number is.
  */
-export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, hasData, planHref }: {
+export function BalanceHero({ month, isCurrentMonth, totals: t, comparison: c, plan, hasData, planHref }: {
   month: string;
   isCurrentMonth: boolean;
   totals: Totals;
-  previous: Totals;
+  /** For the "vs last month" lines; stops at the same day while the month is running. */
+  comparison: MonthComparison;
   plan: Plan;
   hasData: boolean;
   /** Link to the Plan page, for the "left to spend" figure. */
@@ -70,7 +67,7 @@ export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, 
           <span className="hero-flow-text">
             <span className="hero-flow-label">Income</span>
             <span className="hero-flow-value num">{money(t.income)}</span>
-            <span className="hero-flow-delta">{change(t.income, previous.income) ?? 'Nothing to compare yet'}</span>
+            <span className="hero-flow-delta">{changeLabel(c.now.income, c.before.income, c.partial) ?? 'Nothing to compare yet'}</span>
           </span>
         </div>
         <div className="hero-flow">
@@ -78,7 +75,7 @@ export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, 
           <span className="hero-flow-text">
             <span className="hero-flow-label">Spending</span>
             <span className="hero-flow-value num">{money(t.expense)}</span>
-            <span className="hero-flow-delta">{change(t.expense, previous.expense) ?? 'Nothing to compare yet'}</span>
+            <span className="hero-flow-delta">{changeLabel(c.now.expense, c.before.expense, c.partial) ?? 'Nothing to compare yet'}</span>
           </span>
         </div>
       </div>

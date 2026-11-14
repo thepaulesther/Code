@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BudgetStatus, Totals } from './budget';
+import type { MonthComparison } from './compare';
 import { overviewInsights } from './insights';
 import type { Plan } from './plan';
 
@@ -19,8 +20,9 @@ const budget = (category: string, limit: number, spent: number): BudgetStatus =>
   const ratio = spent / limit;
   return { category, limit, spent, remaining: limit - spent, ratio, state: ratio > 1 ? 'over' : ratio >= 0.8 ? 'warn' : 'ok' };
 };
+const cmp = (now: Totals, before: Totals, partial = false): MonthComparison => ({ now, before, partial, day: partial ? 3 : 30 });
 const base = {
-  totals: totals(0, 0), previous: totals(0, 0), previousLabel: 'October', plan: plan(), isCurrentMonth: true,
+  totals: totals(0, 0), comparison: cmp(totals(0, 0), totals(0, 0)), previousLabel: 'October', plan: plan(), isCurrentMonth: true,
   budgets: [] as BudgetStatus[], byCategory: [] as { category: string; amount: number }[], money,
 };
 
@@ -52,15 +54,25 @@ describe('overviewInsights', () => {
     const list = overviewInsights({
       ...base,
       totals: totals(0, 1000),
-      previous: totals(0, 800),
+      comparison: cmp(totals(0, 1000), totals(0, 800)),
       byCategory: [{ category: 'Housing', amount: 600 }],
     });
     expect(list.map((i) => i.title)).toEqual(['Housing is your biggest spend', 'Spending is up 25% on October']);
     expect(list[1].tone).toBe('warn');
   });
 
+  it('words a running month as "so far" against the same day, with a neutral tone', () => {
+    const [i] = overviewInsights({ ...base, comparison: cmp(totals(0, 60), totals(0, 400), true) });
+    expect(i).toMatchObject({
+      id: 'vs-last',
+      tone: 'neutral',
+      title: 'Spending so far is down 85% on the same point in October',
+      detail: '£60.00 by the 3rd, against £400.00 by the same day in October.',
+    });
+  });
+
   it('skips tiny month-on-month changes', () => {
-    const list = overviewInsights({ ...base, totals: totals(0, 1020), previous: totals(0, 1000) });
+    const list = overviewInsights({ ...base, totals: totals(0, 1020), comparison: cmp(totals(0, 1020), totals(0, 1000)) });
     expect(list.find((i) => i.id === 'vs-last')).toBeUndefined();
   });
 
@@ -73,7 +85,7 @@ describe('overviewInsights', () => {
     const list = overviewInsights({
       ...base,
       totals: totals(5000, 1000),
-      previous: totals(5000, 500),
+      comparison: cmp(totals(5000, 1000), totals(5000, 500)),
       plan: plan({ income: 5000, perDay: 50, daysLeft: 5 }),
       budgets: [budget('Dining', 100, 50)],
       byCategory: [{ category: 'Dining', amount: 50 }],

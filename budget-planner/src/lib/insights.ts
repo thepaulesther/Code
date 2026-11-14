@@ -1,4 +1,6 @@
 import type { BudgetStatus, Totals } from './budget';
+import type { MonthComparison } from './compare';
+import { ordinal } from './recurring';
 import type { Plan } from './plan';
 
 export type InsightTone = 'good' | 'warn' | 'bad' | 'neutral';
@@ -18,7 +20,8 @@ export interface Insight {
  */
 export function overviewInsights(input: {
   totals: Totals;
-  previous: Totals;
+  /** This month against the previous one; stops at the same day while the month is running. */
+  comparison: MonthComparison;
   previousLabel: string;
   plan: Plan;
   isCurrentMonth: boolean;
@@ -27,7 +30,7 @@ export function overviewInsights(input: {
   money: (n: number) => string;
   max?: number;
 }): Insight[] {
-  const { totals: t, previous, plan, budgets, byCategory, money } = input;
+  const { totals: t, comparison: cmp, plan, budgets, byCategory, money } = input;
   const out: Insight[] = [];
 
   if (input.isCurrentMonth && plan.income > 0 && plan.shortfall <= 0 && plan.perDay > 0) {
@@ -83,18 +86,22 @@ export function overviewInsights(input: {
     });
   }
 
-  if (t.expense > 0 && previous.expense > 0) {
-    const change = (t.expense - previous.expense) / previous.expense;
+  if (cmp.now.expense > 0 && cmp.before.expense > 0) {
+    const change = (cmp.now.expense - cmp.before.expense) / cmp.before.expense;
     const pct = Math.round(Math.abs(change) * 100);
     if (pct >= 5) {
+      const dir = change > 0 ? 'up' : 'down';
       out.push({
         id: 'vs-last',
-        tone: change > 0.1 ? 'warn' : change < 0 ? 'good' : 'neutral',
+        // Part of a month is a weak signal, so it's never called good or bad.
+        tone: cmp.partial ? 'neutral' : change > 0.1 ? 'warn' : change < 0 ? 'good' : 'neutral',
         icon: 'bulb',
-        title: `Spending is ${change > 0 ? 'up' : 'down'} ${pct}% on ${input.previousLabel}`,
-        detail: input.isCurrentMonth
-          ? `${money(t.expense)} so far, against ${money(previous.expense)} for all of ${input.previousLabel}.`
-          : `${money(t.expense)}, against ${money(previous.expense)}.`,
+        title: cmp.partial
+          ? `Spending so far is ${dir} ${pct}% on the same point in ${input.previousLabel}`
+          : `Spending is ${dir} ${pct}% on ${input.previousLabel}`,
+        detail: cmp.partial
+          ? `${money(cmp.now.expense)} by the ${ordinal(cmp.day)}, against ${money(cmp.before.expense)} by the same day in ${input.previousLabel}.`
+          : `${money(cmp.now.expense)}, against ${money(cmp.before.expense)}.`,
       });
     }
   }

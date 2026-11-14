@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Icon, type IconName } from '../ui/Icon';
 
 export interface SetupStep {
@@ -24,6 +24,25 @@ export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
   const doneCount = steps.filter((s) => s.done).length;
   const current = steps.find((s) => !s.done && !skipped.includes(s.id));
 
+  // Skipping removes the focused button; move focus to the next step so keyboard users keep their place.
+  const listRef = useRef<HTMLOListElement>(null);
+  const focusNext = useRef(false);
+  useEffect(() => {
+    if (!focusNext.current) return;
+    focusNext.current = false;
+    const target = listRef.current?.querySelector<HTMLElement>('.is-current button, .is-current select');
+    (target ?? document.getElementById('page-title'))?.focus();
+  }, [current?.id]);
+  const skip = (id: string) => {
+    focusNext.current = true;
+    onSkip(id);
+  };
+  const hide = () => {
+    onHide();
+    // The guide disappears with the focused button in it.
+    requestAnimationFrame(() => document.getElementById('page-title')?.focus());
+  };
+
   return (
     <section className="card setup" aria-labelledby="setup-title">
       <div className="card-head">
@@ -31,7 +50,7 @@ export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
           Set up Elora
           <span className="card-sub">{doneCount} of {steps.length} done · every step after the first is optional</span>
         </h2>
-        <button type="button" className="btn-ghost sm" onClick={onHide}>Hide guide</button>
+        <button type="button" className="btn-ghost sm" onClick={hide}>Hide guide</button>
       </div>
       <div
         className="meter setup-meter"
@@ -43,7 +62,7 @@ export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
       >
         <div className="meter-fill" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
       </div>
-      <ol className="setup-steps">
+      <ol className="setup-steps" ref={listRef}>
         {steps.map((s, i) => {
           const isSkipped = !s.done && skipped.includes(s.id);
           const isCurrent = s === current;
@@ -72,7 +91,7 @@ export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
                           </button>
                         )}
                         {s.optional && (
-                          <button type="button" className="btn-ghost" onClick={() => onSkip(s.id)}>Skip for now</button>
+                          <button type="button" className="btn-ghost" onClick={() => skip(s.id)}>Skip for now</button>
                         )}
                       </div>
                     )}
