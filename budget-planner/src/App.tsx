@@ -82,7 +82,7 @@ const PAGE_TITLES: Record<Route, string> = {
   budgets: 'Budgets',
   savings: 'Savings',
   insights: 'Financial insights',
-  plans: 'Monthly plan',
+  plans: 'Financial plan',
   settings: 'Settings',
 };
 
@@ -619,7 +619,7 @@ export default function App() {
         return (
           <>
             <PageHeader
-              title="Monthly plan"
+              title="Financial plan"
               subtitle="How much you can spend while still paying your bills and saving for your goals."
               actions={monthSwitch}
             />

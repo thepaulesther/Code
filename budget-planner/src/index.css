@@ -1128,3 +1128,12 @@ a { color: var(--accent-text); }
 @media (max-width: 599px) {
   .desktop-only { display: none !important; }
 }
+
+/* Touch devices (phones and tablets): roomier secondary controls */
+@media (pointer: coarse) {
+  .btn-ghost, .link-more, .chip, .rec-actions .btn-ghost, .month-switch .btn-ghost { min-height: 40px; }
+  .btn-ghost.sm { min-height: 36px; }
+  .brand { min-height: var(--tap); }
+  .cat-list li { min-height: 52px; }
+  .link-btn { padding: 6px 0; }
+}

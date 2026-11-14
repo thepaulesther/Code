@@ -96,7 +96,7 @@ function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
           </small>
         </span>
       </label>
-      <button type="button" className="btn-ghost" disabled={!alerts.enabled} onClick={() => playAlarm('over-plan')}>
+      <button type="button" className="btn-secondary sm" style={{ alignSelf: 'flex-start' }} disabled={!alerts.enabled} onClick={() => playAlarm('over-plan')}>
         Test the alarm sound
       </button>
     </section>

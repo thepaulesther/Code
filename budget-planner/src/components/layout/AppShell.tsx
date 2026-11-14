@@ -159,7 +159,7 @@ export function MoreSheet({ open, onClose, route, onImport, onExport, onInstall,
     <Modal open={open} onClose={onClose} title="More">
       <ul className="menu-list">
         <MenuLink route="insights" current={route} icon="insights" label="Financial insights" hint="Trends, categories and savings rate" onPick={onClose} />
-        <MenuLink route="plans" current={route} icon="plans" label="Monthly plan" hint="What you can spend while saving" onPick={onClose} />
+        <MenuLink route="plans" current={route} icon="plans" label="Financial plan" hint="What you can spend while saving" onPick={onClose} />
         <MenuLink route="settings" current={route} icon="settings" label="Settings" hint="Currency, categories, alerts, theme" onPick={onClose} />
         <MenuButton icon="import" label="Import CSV" hint={canImport ? 'From your bank or card' : 'Choose your currency first'} onClick={then(onImport)} disabled={!canImport} />
         <MenuButton icon="export" label="Export CSV" hint={canExport ? 'Back up or move your data' : 'Nothing to export yet'} onClick={then(onExport)} disabled={!canExport} />
