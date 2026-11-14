@@ -26,7 +26,10 @@ import {
   type Transaction,
   type TxType,
 } from './lib/budget';
-import type { AppData } from './lib/store';
+import { readSnapshot, takeSnapshot, type AppData } from './lib/store';
+import { createBackup } from './lib/backup';
+import { downloadText, fileDate } from './lib/download';
+import { RestoreDialog } from './components/RestoreDialog';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
@@ -367,6 +370,28 @@ export default function App({ initial, notice }: {
 
 
   const setup = useSetupPrefs();
+  // ---- Full backup and restore ----
+  const [restoring, setRestoring] = useState<string | null>(null); // null: closed; '' : choose a file; text: check it
+  const [backupText, setBackupText] = useState<string | null>(null);
+  const backup = () => {
+    void createBackup(data).then((text) => {
+      if (IS_ARTIFACT || !downloadText(`elora-backup-${fileDate()}.json`, text)) setBackupText(text);
+      else setToast('Downloaded a full backup. Keep it somewhere safe, such as your email or cloud storage.');
+    });
+  };
+  const restore = (next: AppData) => {
+    const before = data;
+    // Never replace data without a safety copy.
+    if (!takeSnapshot('restore', JSON.stringify(before))) {
+      setToast('Restore cancelled: Elora couldn’t keep a safety copy of your current data (browser storage may be full).');
+      return;
+    }
+    setData(next);
+    setRestoring(null);
+    setMonth(CURRENT_MONTH);
+    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setData(before));
+  };
+
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
@@ -760,6 +785,12 @@ export default function App({ initial, notice }: {
                 navigate('overview');
               }}
               onExport={() => setDialog('export')}
+              onBackup={backup}
+              onRestore={(text) => setRestoring(text ?? '')}
+              onDownloadSnapshot={(key) => {
+                const text = readSnapshot(key);
+                if (text && (IS_ARTIFACT || !downloadText(`elora-safety-copy-${fileDate()}.json`, text))) setBackupText(text);
+              }}
               canExport={transactions.length > 0}
               setupHidden={setup.prefs.hidden}
               onShowSetup={() => {
@@ -928,6 +959,7 @@ export default function App({ initial, notice }: {
           route={route}
           onImport={() => setDialog('import')}
           onExport={() => setDialog('export')}
+          onBackup={backup}
           onInstall={install}
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
@@ -975,6 +1007,20 @@ export default function App({ initial, notice }: {
           suggestedEmergency={suggestedEmergencyTarget(transactions, CURRENT_MONTH)}
           onSave={saveGoalAndMoney}
         />
+        <RestoreDialog
+          open={restoring != null}
+          onClose={() => setRestoring(null)}
+          initialText={restoring || undefined}
+          current={data}
+          onRestore={restore}
+        />
+        <Modal open={backupText != null} onClose={() => setBackupText(null)} title="Your backup">
+          <p className="modal-text">
+            Downloads aren’t available here. Copy this text and keep it somewhere safe; you can restore it with
+            “Restore from backup” → “Paste the backup text instead”.
+          </p>
+          <textarea id="backup-text" className="csv-box" readOnly rows={10} value={backupText ?? ''} aria-label="Backup" />
+        </Modal>
         <ImportDialog
           open={dialog === 'import'}
           onClose={() => setDialog(null)}

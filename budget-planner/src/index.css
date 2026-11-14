@@ -1328,3 +1328,15 @@ a { color: var(--accent-text); }
 .recovery-fresh > .btn-ghost { margin-left: -12px; }
 .alert-banner .btn-secondary { margin-left: auto; align-self: center; }
 @media (max-width: 599px) { .recovery-card { padding: var(--space-5); } }
+
+/* ---- Stage 0.5: backup and restore ---- */
+.restore-problems {
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+.restore-problems ul { margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); }
+.restore-problems .hint { margin: 0; }
+.preview th[scope='row'] { text-align: left; font-weight: 550; color: var(--text); background: none; position: static; font-size: var(--text-sm); }
+.snapshots { display: flex; flex-direction: column; gap: var(--space-2); }
+.snapshots h4 { margin: 0; font-size: var(--text-md); }
+.snapshots .hint { margin: 0; }
