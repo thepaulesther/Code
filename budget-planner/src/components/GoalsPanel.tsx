@@ -5,6 +5,7 @@ import { goalProgress, goalRemaining, goalSaved, type Goal, type GoalAllocation 
 import { Modal } from './Modal';
 import { EmptyState } from './ui/EmptyState';
 import { Icon } from './ui/Icon';
+import { ProgressRing } from './ui/ProgressRing';
 
 const PRESETS = ['Car', 'Property', 'New phone', 'Emergency fund'];
 
@@ -98,10 +99,12 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
             const done = goalRemaining(g) <= 0;
             return (
               <li key={g.id} className={done ? 'is-done' : ''}>
+                <ProgressRing value={goalProgress(g)} label={`${g.name}: ${Math.round(goalProgress(g) * 100)}% saved`} done={done} size={summary ? 46 : 56} />
+                <div className="goal-body">
                 <div className="goal-line">
                   <span className="goal-name">
                     {g.name}
-                    {g.kind === 'emergency' && <span className="badge">safety net</span>}
+                    {g.kind === 'emergency' && <span className="badge">Safety net</span>}
                     {g.autoSave && g.incomeShare && (
                       <span className="badge auto" title="Saved automatically from each income">
                         auto {Math.round(g.incomeShare * 1000) / 10}%
@@ -109,13 +112,11 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
                     )}
                     {g.targetMonth && <span className="goal-date">by {monthLabel(g.targetMonth, 'short')} {g.targetMonth.slice(0, 4)}</span>}
                   </span>
-                  <span className="num goal-nums">
-                    {money(saved)} <span className="muted">/ {money(g.target)}</span>
-                  </span>
                 </div>
-                <div className="meter goal-meter" role="meter" aria-valuemin={0} aria-valuemax={g.target} aria-valuenow={saved} aria-label={`${g.name} progress`}>
-                  <div className="meter-fill" style={{ width: `${goalProgress(g) * 100}%` }} />
-                </div>
+                <p className="goal-figures num">
+                  <strong>{money(saved)}</strong> saved of {money(g.target)}
+                  {!done && <span className="goal-togo"> · {money(goalRemaining(g))} to go</span>}
+                </p>
                 <p className="goal-plan">{planLine(g)}</p>
 
                 {summary ? null : moneyFor === g.id ? (
@@ -142,13 +143,14 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
                   </div>
                 ) : (
                   <div className="goal-actions">
-                    <button type="button" className="btn-ghost accent" onClick={() => { setMoneyFor(g.id); setMoneyText(''); }}>
+                    <button type="button" className="btn-secondary sm" onClick={() => { setMoneyFor(g.id); setMoneyText(''); }}>
                       <Icon name="plus" size={16} /> Add money
                     </button>
                     <button type="button" className="btn-ghost" onClick={() => onDialog(g)}>Edit</button>
                     <button type="button" className="btn-ghost danger" onClick={() => setConfirmDelete(g.id)}>Delete</button>
                   </div>
                 )}
+                </div>
               </li>
             );
           })}

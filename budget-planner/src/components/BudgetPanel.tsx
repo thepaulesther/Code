@@ -95,7 +95,7 @@ export function BudgetPanel({ status, budgets, categories, onChange, summary, ac
               <div className="budget-line">
                 <span className="budget-name">{b.category}</span>
                 <span className="num budget-nums">
-                  {money(b.spent)} <span className="muted">/ {money(b.limit)}</span>
+                  {money(b.spent)} <span className="muted">spent of {money(b.limit)}</span>
                 </span>
               </div>
               <div
@@ -109,7 +109,11 @@ export function BudgetPanel({ status, budgets, categories, onChange, summary, ac
                 <div className="meter-fill" style={{ width: `${Math.min(b.ratio, 1) * 100}%` }} />
               </div>
               <span className="budget-note">
-                {b.state === 'over' ? `${money(-b.remaining)} over` : `${money(b.remaining)} left`}
+                <span className="budget-status">
+                  <Icon name={b.state === 'ok' ? 'check' : 'alert'} size={14} />
+                  {b.state === 'over' ? 'Over limit' : b.state === 'warn' ? 'Close to limit' : 'On track'}
+                </span>
+                <span className="num">{b.state === 'over' ? `${money(-b.remaining)} over` : `${money(b.remaining)} left`}</span>
               </span>
             </li>
           ))}

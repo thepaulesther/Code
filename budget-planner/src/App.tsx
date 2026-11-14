@@ -71,6 +71,29 @@ import { overviewInsights } from './lib/insights';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
+const PHONE_QUERY = '(max-width: 599px)';
+function useIsPhone() {
+  const [phone, setPhone] = useState(() => {
+    try {
+      return window.matchMedia(PHONE_QUERY).matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    let mq: MediaQueryList;
+    try {
+      mq = window.matchMedia(PHONE_QUERY);
+    } catch {
+      return;
+    }
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 const greeting = () => {
   const h = new Date().getHours();
   return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -334,6 +357,10 @@ export default function App() {
     document.getElementById('page-title')?.focus({ preventScroll: true });
   }, [route]);
 
+  // On phones the 6-month chart starts folded; its header still shows the month's figures.
+  const isPhone = useIsPhone();
+  const [trendOpen, setTrendOpen] = useState(false);
+
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
@@ -453,21 +480,39 @@ export default function App() {
     </section>
   );
 
-  const trendCard = (
-    <section className="card">
-      <div className="card-head">
-        <h2>
-          Income and spending
-          <span className="card-sub">Last 6 months. Select a month to view it.</span>
-        </h2>
-        <div className="key">
-          <span><i className="k-income" /> Income</span>
-          <span><i className="k-expense" /> Spending</span>
-        </div>
-      </div>
-      <TrendChart data={trend} selected={month} onSelect={setMonth} />
-    </section>
+  const selTrend = trend.find((x) => x.month === month);
+  const trendHead = (
+    <div className="card-head">
+      <h2>
+        Income and spending
+        <span className="card-sub trend-sum">
+          {monthLabel(month, 'short')}:{' '}
+          <span className="trend-sum-item"><i className="k-income" /> <span className="num">{money(selTrend?.income ?? 0)}</span> in</span>{' '}
+          <span className="trend-sum-item"><i className="k-expense" /> <span className="num">{money(selTrend?.expense ?? 0)}</span> out</span>
+        </span>
+      </h2>
+      <span className="card-hint">Last 6 months · select a month</span>
+    </div>
   );
+  const trendCard = (collapsible = false) =>
+    collapsible ? (
+      <details
+        className="card collapsible"
+        open={trendOpen}
+        onToggle={(e) => setTrendOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary>
+          {trendHead}
+          <Icon name="chevron-right" size={18} className="collapse-chev" />
+        </summary>
+        <TrendChart data={trend} selected={month} onSelect={setMonth} />
+      </details>
+    ) : (
+      <section className="card">
+        {trendHead}
+        <TrendChart data={trend} selected={month} onSelect={setMonth} />
+      </section>
+    );
 
   const donutCard = (
     <section className="card">
@@ -609,7 +654,7 @@ export default function App() {
             {alertBanner}
             {stats}
             <div className="section-grid">
-              <div className="span-7">{trendCard}</div>
+              <div className="span-7">{trendCard()}</div>
               <div className="span-5">{donutCard}</div>
             </div>
           </>
@@ -730,7 +775,7 @@ export default function App() {
                   </section>
                 )}
               </div>
-              <div className="span-7">{trendCard}</div>
+              <div className="span-7">{trendCard(isPhone)}</div>
               <div className="span-5">
                 <TransactionList
                   transactions={monthTx}
