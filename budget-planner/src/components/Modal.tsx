@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { Icon } from './ui/Icon';
 
 /** Native <dialog> with focus trapping, Esc to close, and click-outside to close. */
 export function Modal({ open, onClose, title, wide, children }: {
@@ -29,7 +30,7 @@ export function Modal({ open, onClose, title, wide, children }: {
         <div className="modal-inner">
           <div className="modal-head">
             <h2>{title}</h2>
-            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">×</button>
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
           </div>
           {children}
         </div>

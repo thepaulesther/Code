@@ -70,7 +70,7 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
 
       {goals.length === 0 ? (
         <p className="empty">
-          Saving for a car, a property or a new phone? Add a goal with its price and when you want it, and Ledgerly works
+          Saving for a car, a property or a new phone? Add a goal with its price and when you want it, and Elora works
           out how much to put aside each month. An emergency fund is a good first goal.
         </p>
       ) : (
@@ -263,7 +263,7 @@ function GoalForm({ goal, emergencyTaken, suggestedEmergency, onSave }: {
         <label className="check">
           <input id="goal-mode-plan" type="radio" name="goal-mode" checked={mode === 'plan'} onChange={() => setMode('plan')} />
           <span>
-            Let Ledgerly work it out
+            Let Elora work it out
             <small>
               {targetMonth
                 ? 'It works out how much to put aside each month to have it by then.'

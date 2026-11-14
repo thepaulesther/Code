@@ -106,7 +106,7 @@ export interface ColumnMap {
   note: number;
   category: number;
   type: number;
-  /** Ledgerly's own export: what a converted amount was originally, and the rate used. */
+  /** Elora's own export: what a converted amount was originally, and the rate used. */
   origAmount: number;
   origCurrency: number;
   rate: number;

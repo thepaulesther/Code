@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { monthLabel } from '../lib/budget';
 import { useFormat } from '../lib/format';
+import { EmptyState } from './ui/EmptyState';
 
 interface Slice { category: string; amount: number }
 
@@ -10,7 +11,11 @@ export function SpendingDonut({ data }: { data: Slice[] }) {
   const total = data.reduce((s, d) => s + d.amount, 0);
 
   if (total === 0) {
-    return <p className="empty">No expenses this month yet.</p>;
+    return (
+      <EmptyState icon="budgets" title="No spending this month" compact>
+        Once you add expenses, you’ll see which categories they went to.
+      </EmptyState>
+    );
   }
 
   const R = 70;
@@ -92,12 +97,14 @@ export function TrendChart({ data, selected, onSelect }: {
   if (data.every((d) => d.income === 0 && d.expense === 0)) {
     return (
       <div ref={ref}>
-        <p className="empty">Your income and spending for these six months will appear here once you add some.</p>
+        <EmptyState icon="insights" title="No trend yet" compact>
+          Your income and spending for these six months will appear here once you add some.
+        </EmptyState>
       </div>
     );
   }
   const H = W < 480 ? 180 : 220;
-  const PAD = { top: 12, right: 8, bottom: 26, left: 48 };
+  const PAD = { top: 12, right: 8, bottom: 28, left: 52 };
   const max = Math.max(1, ...data.flatMap((d) => [d.income, d.expense]));
   // Round the axis max up to a "nice" number.
   const mag = 10 ** Math.floor(Math.log10(max));
@@ -106,7 +113,7 @@ export function TrendChart({ data, selected, onSelect }: {
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
   const band = innerW / data.length;
-  const barW = Math.min(18, band / 3.2);
+  const barW = Math.min(20, band / 3.2);
   const y = (v: number) => PAD.top + innerH - (v / niceMax) * innerH;
 
   return (
@@ -128,12 +135,15 @@ export function TrendChart({ data, selected, onSelect }: {
               key={d.month}
               className={`trend-col ${isSel ? 'is-selected' : ''}`}
               onClick={() => onSelect(d.month)}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect(d.month))}
+              tabIndex={0}
+              aria-pressed={isSel}
               role="button"
               aria-label={`${monthLabel(d.month)}: income ${money(d.income)}, expenses ${money(d.expense)}`}
             >
               <rect x={cx - band / 2 + 2} y={PAD.top} width={band - 4} height={innerH} className="trend-hit" rx="6" />
-              <rect x={cx - barW - 1.5} y={y(d.income)} width={barW} height={y(0) - y(d.income)} rx="3" className="bar-income" />
-              <rect x={cx + 1.5} y={y(d.expense)} width={barW} height={y(0) - y(d.expense)} rx="3" className="bar-expense" />
+              <rect x={cx - barW - 1.5} y={y(d.income)} width={barW} height={y(0) - y(d.income)} rx="4" className="bar-income" />
+              <rect x={cx + 1.5} y={y(d.expense)} width={barW} height={y(0) - y(d.expense)} rx="4" className="bar-expense" />
               <text x={cx} y={H - 8} textAnchor="middle" className={`axis ${isSel ? 'axis-strong' : ''}`}>
                 {monthLabel(d.month, 'short')}
               </text>

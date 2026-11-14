@@ -57,7 +57,7 @@ export function PlanCard({ plan, month, isCurrentMonth, expectedIncome, onSetInc
       <section className="card plan">
         <div className="card-head"><h2>Monthly plan</h2></div>
         <p className="empty">
-          Add your income (salary and any other money coming in), or type what you expect to earn each month. Ledgerly
+          Add your income (salary and any other money coming in), or type what you expect to earn each month. Elora
           then works out how much you can spend while saving for your goals and an emergency fund.
         </p>
         {incomeEditor}

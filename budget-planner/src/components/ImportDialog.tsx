@@ -127,7 +127,7 @@ function ImportBody({ data, onImport, onCancel, ratesStatus, onRefreshRates }: {
     return (
       <div className="import-start">
         <p className="modal-text">
-          Most banks and card providers let you download transactions as a CSV file. Ledgerly works out which column is
+          Most banks and card providers let you download transactions as a CSV file. Elora works out which column is
           which, and you can check and fix it before anything is added.
         </p>
         <label
@@ -257,7 +257,7 @@ function ImportBody({ data, onImport, onCancel, ratesStatus, onRefreshRates }: {
 
       <p className="import-summary" aria-live="polite">
         <span className="pill ok">{toImport.length} to import</span>
-        {dupes > 0 && <span className="pill dup">{dupes} already in Ledgerly</span>}
+        {dupes > 0 && <span className="pill dup">{dupes} already in Elora</span>}
         {invalid > 0 && <span className="pill bad">{invalid} can’t be read</span>}
       </p>
 
