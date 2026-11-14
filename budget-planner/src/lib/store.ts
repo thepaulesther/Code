@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
+  monthOf,
+  newId,
   SAMPLE_ONE_OFFS,
   todayISO,
   type Budgets,
@@ -9,16 +11,30 @@ import {
   type TxType,
 } from './budget';
 import { conversionRate, round2, type RateCache } from './currency';
+import { DEFAULT_PLAN, syncAutoSavings, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
 import { readJSON, writeJSON } from './storage';
 
 export type Theme = 'system' | 'light' | 'dark';
+
+export interface AlertSettings {
+  /** Show warnings when spending passes income or the plan. */
+  enabled: boolean;
+  /** Play a short alarm sound when a new warning appears. */
+  sound: boolean;
+  /** Also send a system notification (phone or desktop), if the browser allows it. */
+  notify: boolean;
+}
+
+export const DEFAULT_ALERTS: AlertSettings = { enabled: true, sound: true, notify: false };
 
 export interface Settings {
   currency: string;
   theme: Theme;
   expenseCategories: string[];
   incomeCategories: string[];
+  plan?: PlanSettings;
+  alerts?: AlertSettings;
 }
 
 export interface AppData {
@@ -28,6 +44,36 @@ export interface AppData {
   recurring: RecurringRule[];
   settings: Settings;
   rates?: RateCache;
+  /** Savings goals and the emergency fund. */
+  goals?: Goal[];
+  /** The most serious alert already raised per month (YYYY-MM), so each one sounds only once. */
+  alertLog?: Record<string, AlertLevel>;
+}
+
+export const planSettingsOf = (s: Settings): PlanSettings => ({ ...DEFAULT_PLAN, ...s.plan });
+export const alertSettingsOf = (s: Settings): AlertSettings => ({ ...DEFAULT_ALERTS, ...s.alerts });
+
+/* ---------- Goals ---------- */
+
+/** Add a new goal or replace an existing one with the same id. */
+export function saveGoal(d: AppData, goal: Goal): AppData {
+  const goals = d.goals ?? [];
+  return {
+    ...d,
+    goals: goals.some((g) => g.id === goal.id) ? goals.map((g) => (g.id === goal.id ? goal : g)) : [...goals, goal],
+  };
+}
+
+export const deleteGoal = (d: AppData, id: string): AppData => ({ ...d, goals: (d.goals ?? []).filter((g) => g.id !== id) });
+
+/** Put money into a goal (or take it out, with a negative amount). */
+export function addToGoal(d: AppData, id: string, amount: number, date: string): AppData {
+  return {
+    ...d,
+    goals: (d.goals ?? []).map((g) =>
+      g.id === id ? { ...g, contributions: [...g.contributions, { id: newId(), date, amount }] } : g,
+    ),
+  };
 }
 
 const KEY = 'bp.data';
@@ -92,6 +138,95 @@ export function removeSamples(d: AppData): { data: AppData; transactions: number
 }
 
 /** Stop a repeating item. Its past payments stay unless `deletePayments` is set. */
+export interface EditOptions {
+  /** For a payment made by a repeating item: also change the item, so future payments use the new details. */
+  updateFuture?: boolean;
+  /** Stop this other repeating item (e.g. an older "Rent" this one replaces). Its past payments stay. */
+  replaceRuleId?: string;
+}
+
+/** Repeating-item fields that follow a transaction's details. */
+function ruleDetailsFrom(tx: Transaction, repeat: 0 | 1 | 12): Omit<RecurringRule, 'id' | 'startMonth'> {
+  const rule: Omit<RecurringRule, 'id' | 'startMonth'> = {
+    type: tx.type,
+    amount: tx.original ? tx.original.amount : tx.amount,
+    category: tx.category,
+    note: tx.note,
+    day: Number(tx.date.slice(8, 10)),
+  };
+  if (tx.original) {
+    rule.currency = tx.original.currency;
+    rule.rate = tx.original.rate;
+  }
+  if (repeat === 12) rule.everyMonths = 12;
+  if (tx.spread && tx.spread > 1) rule.spreadMonths = tx.spread;
+  return rule;
+}
+
+/**
+ * Save changes to a transaction, including whether it repeats.
+ * - A one-off set to repeat becomes the first payment of a new repeating item; months since then are filled in.
+ * - A payment from a repeating item keeps its link; with `updateFuture` the item takes the new details too.
+ *   Setting it to not repeat stops the item (payments already recorded stay).
+ * Returns the new data and how many payments were filled in.
+ */
+export function editTransaction(
+  d: AppData,
+  id: string,
+  tx: Transaction,
+  repeat: 0 | 1 | 12,
+  opts: EditOptions,
+  today: string,
+): { data: AppData; added: number } {
+  const old = d.transactions.find((t) => t.id === id);
+  if (!old) return { data: d, added: 0 };
+
+  const next: Transaction = { ...tx, id };
+  delete next.sample; // once edited, it's the user's own entry
+  delete next.recurringId;
+  let data: AppData = d;
+  if (opts.replaceRuleId) data = stopRule(data, opts.replaceRuleId, false);
+
+  const linked = old.recurringId ? data.recurring.find((r) => r.id === old.recurringId) : undefined;
+  let recurring = data.recurring;
+
+  if (linked && repeat === 0) {
+    // Stop repeating: keep every payment, unlinked.
+    data = stopRule(data, linked.id, false);
+    recurring = data.recurring;
+  } else if (linked) {
+    next.recurringId = linked.id;
+    recurring = recurring.map((r) => {
+      if (r.id !== linked.id) return r;
+      const updated: RecurringRule = opts.updateFuture
+        ? { id: r.id, startMonth: r.startMonth, lastGenerated: r.lastGenerated, ...ruleDetailsFrom(next, repeat) }
+        : { ...r };
+      if (r.paused) updated.paused = true;
+      // How often it repeats is always taken from the form.
+      if (repeat === 12) updated.everyMonths = 12;
+      else delete updated.everyMonths;
+      return updated;
+    });
+  } else if (repeat > 0) {
+    // This entry becomes the first payment; the schedule continues from its month.
+    const rule: RecurringRule = {
+      id: newId(),
+      startMonth: monthOf(next.date),
+      lastGenerated: monthOf(next.date),
+      ...ruleDetailsFrom(next, repeat),
+    };
+    next.recurringId = rule.id;
+    recurring = [...recurring, rule];
+  }
+
+  const before = data.transactions.length;
+  const updated = applyRecurring(
+    { ...data, recurring, transactions: data.transactions.map((t) => (t.id === id ? next : t)) },
+    today,
+  );
+  return { data: updated, added: updated.transactions.length - before };
+}
+
 export function stopRule(d: AppData, id: string, deletePayments: boolean): AppData {
   return {
     ...d,
@@ -138,7 +273,7 @@ export function applyRecurring(data: AppData, today: string): AppData {
 }
 
 export function emptyData(settings: Settings): AppData {
-  return { version: 2, transactions: [], budgets: {}, recurring: [], settings };
+  return { version: 2, transactions: [], budgets: {}, recurring: [], goals: [], settings };
 }
 
 /* ---------- Base currency ---------- */
@@ -233,8 +368,21 @@ export function deleteCategory(d: AppData, type: TxType, name: string): AppData 
 
 /* ---------- Hook ---------- */
 
+/** Bring automatic goal savings (e.g. "20% of income to the emergency fund") in line with the transactions. */
+export function withAutoSavings(d: AppData): AppData {
+  if (!d.goals?.length) return d;
+  const goals = syncAutoSavings(d.goals, d.transactions);
+  return goals === d.goals ? d : { ...d, goals };
+}
+
 export function useAppData() {
-  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(), todayISO()));
+  const [data, setRaw] = useState<AppData>(() => withAutoSavings(applyRecurring(loadData(), todayISO())));
+
+  // Every change (adding, editing, deleting, importing, undo) keeps automatic savings in step.
+  const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
+    (update) => setRaw((d) => withAutoSavings(typeof update === 'function' ? update(d) : update)),
+    [],
+  );
 
   useEffect(() => writeJSON(KEY, data), [data]);
 
@@ -245,7 +393,7 @@ export function useAppData() {
     };
     document.addEventListener('visibilitychange', onShow);
     return () => document.removeEventListener('visibilitychange', onShow);
-  }, []);
+  }, [setData]);
 
   return [data, setData] as const;
 }

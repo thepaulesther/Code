@@ -10,6 +10,17 @@ A small, private budget planner. Track income and expenses, set monthly limits p
 - **Category budgets**: progress meters that turn amber at 80% and red when over
 - **Repeating transactions**: set “Repeats” to every month or every year for salary, subscriptions or rent. Each one is added on its day, including any months missed while the app was closed. You can pause, resume or stop them from the Repeating panel.
 - **Yearly and multi-month costs**: rent paid once a year (common in Nigeria), school fees or insurance can be spread with “Counts toward: 12 months”. A ₦3,000,000 yearly rent then counts as ₦250,000 in each of the 12 months from the month you pay, in totals, the savings rate, budgets and charts. The list shows each month’s share (“11 of 12 · paid Jan 5”). Repeating items can be **monthly or yearly**; choosing yearly spreads over 12 months automatically.
+- **Savings goals**: a car, a property, a new phone: give each a price and, optionally, the month you need it by. Use **Add money** as you save. Each goal shows its progress and how much to put aside each month. One goal can be your **emergency fund**, and the app suggests 3 months of your average spending as its target.
+- **Save a share of your income automatically**: any goal (typically the emergency fund) can be set to "Save a share of my income", for example 20%. The plan then reserves that share every month, and with "Put it aside automatically" ticked, each income you add from that month on records its share in the goal: a ₦500,000 salary adds ₦100,000. Editing or deleting an income updates its share, money added by hand still counts, and it stops at the target. (This records the saving; set up a standing order at your bank to move the money.)
+- **Monthly plan**: works out how much you can spend while still saving. Income is your average over the last 3 months, broken down (e.g. Salary ₦500,000 + Freelance ₦200,000 = ₦700,000), or an expected income you type in. From that it takes out:
+  - **bills and repeating costs** (yearly rent counts monthly)
+  - what each **dated goal** needs
+  - the **emergency fund**, built up over 12 months by default
+  - a savings share for **goals without a date**, 20% of income by default
+
+  What's left is **free to spend**, shown as an amount and a percentage of income, with this month's spending against it, what's left, and about how much you can spend per day. If bills and savings need more than you earn, it says by how much.
+- **Overspending alerts**: a banner appears when you've used 90% of your free-to-spend money, when you go over it, and (most urgently) when spending passes your income. A short **alarm sound** plays once when a new warning appears. Optionally, you can also get a **notification** on your phone or computer. Both can be turned on or off under Settings → Plan and alerts.
+- **Edit anything you've entered**: the pencil on each transaction opens it in the same form. Change the amount, category, date, note or currency, or set an existing one-off to **repeat every month or year**: it becomes the first payment, and payments due since then are filled in. For a payment that already repeats, "Also change future payments" decides whether the change applies going forward. Every save can be undone.
 - **Your own categories**: add, rename (updates every transaction, budget and repeating item) or remove them in Settings
 - **CSV import**: from your bank or card. Columns are detected automatically, and you can fix them before importing. It handles:
   - comma, semicolon or tab separators
@@ -61,6 +72,8 @@ The site will then be at `https://<owner>.github.io/<repo>/`. The build uses rel
 | `src/lib/csv.ts` | CSV parsing, column/date/amount detection, import with duplicate checks |
 | `src/lib/store.ts` | App data shape, loading, migration and saving, category add/rename/remove, `useAppData` |
 | `src/lib/currency.ts` | Exchange rates: fetching, caching, cross-rate conversion, currency list |
+| `src/lib/plan.ts` | Goals, the monthly plan (income average, bills, goal and emergency-fund amounts, free to spend) and alert levels |
+| `src/lib/alarm.ts` | Alarm sound (Web Audio) and notifications |
 | `src/lib/format.ts` | Currency- and category-aware formatters for components |
 | `src/lib/pwa.ts` | Install prompt, online status, service worker registration |
 | `src/components/` | Charts (SVG), form, lists, budgets, repeating panel, and the Settings, Import and Export dialogs |

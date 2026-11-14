@@ -2,8 +2,11 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { currencyName, formatMoney, shortDate, type TxType } from '../lib/budget';
 import { conversionRate, parseRate, rateForInput, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
+import { notificationPermission, playAlarm, requestNotifications, type NotifyPermission } from '../lib/alarm';
 import {
   addCategory,
+  alertSettingsOf,
+  planSettingsOf,
   categoryNameError,
   changeBaseCurrency,
   deleteCategory,
@@ -16,6 +19,90 @@ import { CurrencySelect, RateField } from './CurrencyFields';
 import { Modal } from './Modal';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
+
+function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
+  const plan = planSettingsOf(data.settings);
+  const alerts = alertSettingsOf(data.settings);
+  const [permission, setPermission] = useState<NotifyPermission>(notificationPermission());
+  const setPlan = (patch: Partial<typeof plan>) =>
+    setData((d) => ({ ...d, settings: { ...d.settings, plan: { ...planSettingsOf(d.settings), ...patch } } }));
+  const setAlerts = (patch: Partial<typeof alerts>) =>
+    setData((d) => ({ ...d, settings: { ...d.settings, alerts: { ...alertSettingsOf(d.settings), ...patch } } }));
+
+  const toggleNotify = async (on: boolean) => {
+    if (on && permission !== 'granted') {
+      const p = await requestNotifications();
+      setPermission(p);
+      if (p !== 'granted') return;
+    }
+    setAlerts({ notify: on });
+  };
+
+  return (
+    <section className="set-section">
+      <h3>Plan and alerts</h3>
+      <div className="field-row">
+        <label className="field">
+          <span>Save for goals without a date</span>
+          <select id="set-savings-rate" value={plan.savingsRate} onChange={(e) => setPlan({ savingsRate: Number(e.target.value) })}>
+            {[0.1, 0.15, 0.2, 0.25, 0.3, 0.4].map((r) => (
+              <option key={r} value={r}>{Math.round(r * 100)}% of income</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Build the emergency fund over</span>
+          <select id="set-emergency-months" value={plan.emergencyMonths} onChange={(e) => setPlan({ emergencyMonths: Number(e.target.value) })}>
+            {[6, 12, 18, 24].map((m) => (
+              <option key={m} value={m}>{m} months</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="hint">
+        Goals with a date get exactly what they need each month. Income comes from your 3-month average unless you set
+        an expected income on the Monthly plan.
+      </p>
+
+      <label className="check">
+        <input id="set-alerts" type="checkbox" checked={alerts.enabled} onChange={(e) => setAlerts({ enabled: e.target.checked })} />
+        <span>
+          Warn me about overspending
+          <small>When spending passes your income, or the money your plan leaves free to spend (and at 90% of it).</small>
+        </span>
+      </label>
+      <label className="check">
+        <input id="set-alert-sound" type="checkbox" disabled={!alerts.enabled} checked={alerts.sound} onChange={(e) => setAlerts({ sound: e.target.checked })} />
+        <span>
+          Play an alarm sound
+          <small>Once, when a new warning appears after you add or change something.</small>
+        </span>
+      </label>
+      <label className="check">
+        <input
+          id="set-alert-notify"
+          type="checkbox"
+          disabled={!alerts.enabled || permission === 'unsupported' || permission === 'denied'}
+          checked={alerts.notify && permission === 'granted'}
+          onChange={(e) => void toggleNotify(e.target.checked)}
+        />
+        <span>
+          Send a notification to this device
+          <small>
+            {permission === 'unsupported'
+              ? 'Notifications aren’t available here. Install the app or open it in a browser to use them.'
+              : permission === 'denied'
+                ? 'Notifications are blocked for this site. Allow them in your browser’s site settings.'
+                : 'Shows up like a message, even when the app isn’t on screen.'}
+          </small>
+        </span>
+      </label>
+      <button type="button" className="btn-ghost" disabled={!alerts.enabled} onClick={() => playAlarm('over-plan')}>
+        Test the alarm sound
+      </button>
+    </section>
+  );
+}
 
 function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
   data: AppData;
@@ -172,6 +259,8 @@ export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, 
 
         <BaseCurrency data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
 
+        <PlanAndAlerts data={data} setData={setData} />
+
         <div className="set-cols">
           <CategoryEditor type="expense" title="Expense categories" data={data} setData={setData} />
           <CategoryEditor type="income" title="Income categories" data={data} setData={setData} />
@@ -196,7 +285,7 @@ export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, 
           </p>
           {confirmReset ? (
             <div className="confirm-row" role="alert">
-              <span>Delete all transactions, budgets and repeating items? This can’t be undone.</span>
+              <span>Delete all transactions, budgets, goals and repeating items? This can’t be undone.</span>
               <div className="head-actions">
                 <button type="button" className="btn-ghost" onClick={() => setConfirmReset(false)}>Cancel</button>
                 <button

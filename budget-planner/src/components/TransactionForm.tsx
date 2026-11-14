@@ -27,7 +27,24 @@ const SPREAD_OPTIONS: [number, string][] = [
   [24, '24 months'],
 ];
 
-export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, recurring, onAdd, onChooseBase }: {
+export interface SubmitOptions {
+  /** Stop this existing repeating item that the new one replaces. */
+  replaceRuleId?: string;
+  /** Editing a payment from a repeating item: also change the item for future payments. */
+  updateFuture?: boolean;
+}
+
+export function TransactionForm({
+  expenseCategories,
+  incomeCategories,
+  rates,
+  ratesStatus,
+  onRefreshRates,
+  recurring,
+  onAdd,
+  onChooseBase,
+  editing,
+}: {
   expenseCategories: string[];
   incomeCategories: string[];
   rates?: RateCache;
@@ -35,22 +52,26 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   onRefreshRates: (() => void) | null;
   /** Existing repeating items, to offer replacing one (e.g. monthly rent -> yearly rent). */
   recurring: RecurringRule[];
-  onAdd: (t: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => void;
+  onAdd: (t: Transaction, repeatEvery: RepeatEvery, opts: SubmitOptions) => void;
   /** Sets the base currency; offered here when none has been chosen yet. */
   onChooseBase: (currency: string) => void;
+  /** Edit this transaction instead of adding a new one (the form starts filled in). */
+  editing?: Transaction;
 }) {
+  const linkedRule = editing?.recurringId ? recurring.find((r) => r.id === editing.recurringId) : undefined;
   const [keepOldFor, setKeepOldFor] = useState<string | null>(null); // rule id the user chose to keep
   const { money, currency: base } = useFormat();
-  const [type, setType] = useState<TxType>('expense');
-  const [amount, setAmount] = useState('');
-  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null); // null = base currency
+  const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
+  const [amount, setAmount] = useState(editing ? String(editing.original?.amount ?? editing.amount) : '');
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(editing?.original?.currency ?? null); // null = base
   const currency = chosenCurrency ?? base;
-  const [rateText, setRateText] = useState<string | null>(null); // null = use the market rate
-  const [category, setCategory] = useState('Groceries');
-  const [note, setNote] = useState('');
-  const [date, setDate] = useState(todayISO());
-  const [repeat, setRepeat] = useState<RepeatEvery>(0);
-  const [spread, setSpread] = useState(1);
+  const [rateText, setRateText] = useState<string | null>(editing?.original ? String(editing.original.rate) : null); // null = market rate
+  const [category, setCategory] = useState(editing?.category ?? 'Groceries');
+  const [note, setNote] = useState(editing?.note ?? '');
+  const [date, setDate] = useState(editing?.date ?? todayISO());
+  const [repeat, setRepeat] = useState<RepeatEvery>(linkedRule ? (intervalOf(linkedRule) === 12 ? 12 : 1) : 0);
+  const [spread, setSpread] = useState(editing?.spread ?? 1);
+  const [updateFuture, setUpdateFuture] = useState(true);
   const [error, setError] = useState('');
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
@@ -62,7 +83,11 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   const shownRate = rateText ?? (foreign && suggested ? rateForInput(suggested) : '');
   const rate = foreign ? parseRate(shownRate) : 1;
   const value = parseAmount(amount);
-  const similar = repeat > 0 && current ? findSimilarRule(recurring, { type, category: current, note }) : undefined;
+  // Offer to replace a matching repeating item, but never the one this payment already belongs to.
+  const similar =
+    repeat > 0 && current && !linkedRule
+      ? findSimilarRule(recurring, { type, category: current, note })
+      : undefined;
   const replaceOld = !!similar && keepOldFor !== similar.id;
 
   const switchType = (t: TxType) => {
@@ -81,7 +106,7 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
     const r = rate ?? 1;
     onAdd(
       {
-        id: newId(),
+        id: editing?.id ?? newId(),
         type,
         amount: round2(value * r),
         category: current,
@@ -91,8 +116,9 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
         ...(spread > 1 ? { spread } : {}),
       },
       repeat,
-      replaceOld ? similar?.id : undefined,
+      { replaceRuleId: replaceOld ? similar?.id : undefined, updateFuture: linkedRule ? updateFuture : undefined },
     );
+    if (editing) return; // the dialog closes; nothing to reset
     setKeepOldFor(null);
     setAmount('');
     setNote('');
@@ -105,10 +131,12 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   const day = Number(date.slice(8, 10));
 
   return (
-    <form className="card tx-form" onSubmit={submit} noValidate>
-      <div className="card-head">
-        <h2>Add transaction</h2>
-      </div>
+    <form className={editing ? 'tx-form' : 'card tx-form'} onSubmit={submit} noValidate>
+      {!editing && (
+        <div className="card-head">
+          <h2>Add transaction</h2>
+        </div>
+      )}
       {!base && (
         <div className="choose-base">
           <label htmlFor="form-base-currency">First, choose the currency your totals are in</label>
@@ -258,9 +286,35 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
           </span>
         </label>
       )}
+      {editing && !linkedRule && repeat > 0 && (
+        <p className="form-note">
+          This entry becomes the first payment. Any {repeat === 12 ? 'yearly' : 'monthly'} payments due between then and
+          today are added for you.
+        </p>
+      )}
+      {linkedRule && repeat > 0 && (
+        <label className="check replace-note">
+          <input id="tx-update-future" type="checkbox" checked={updateFuture} onChange={(e) => setUpdateFuture(e.target.checked)} />
+          <span>
+            Also change future payments
+            <small>Untick to change only this payment. Payments already recorded stay as they are either way.</small>
+          </span>
+        </label>
+      )}
+      {linkedRule && repeat === 0 && (
+        <p className="form-note">
+          This stops “{linkedRule.note || linkedRule.category}” repeating. Payments already recorded stay.
+        </p>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" className="btn-primary">
-        {repeat === 1 ? `Add monthly ${type}` : repeat === 12 ? `Add yearly ${type}` : `Add ${type}`}
+        {editing
+          ? 'Save changes'
+          : repeat === 1
+            ? `Add monthly ${type}`
+            : repeat === 12
+              ? `Add yearly ${type}`
+              : `Add ${type}`}
       </button>
       </fieldset>
     </form>
