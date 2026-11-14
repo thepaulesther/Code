@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { categoryColor, formatMoney, monthLabel } from '../lib/budget';
+import { monthLabel } from '../lib/budget';
+import { useFormat } from '../lib/format';
 
 interface Slice { category: string; amount: number }
 
 export function SpendingDonut({ data }: { data: Slice[] }) {
+  const { money, color } = useFormat();
   const [active, setActive] = useState<string | null>(null);
   const total = data.reduce((s, d) => s + d.amount, 0);
 
@@ -29,7 +31,7 @@ export function SpendingDonut({ data }: { data: Slice[] }) {
                 key={d.category}
                 cx="100" cy="100" r={R}
                 fill="none"
-                stroke={categoryColor(d.category)}
+                stroke={color(d.category)}
                 strokeWidth={active === d.category ? STROKE + 6 : STROKE}
                 strokeDasharray={`${Math.max(len - GAP, 0.5)} ${C}`}
                 strokeDashoffset={-offset}
@@ -47,7 +49,7 @@ export function SpendingDonut({ data }: { data: Slice[] }) {
           {focus ? focus.category : 'Spent'}
         </text>
         <text x="100" y="118" textAnchor="middle" className="donut-value">
-          {formatMoney(focus ? focus.amount : total, { compact: true })}
+          {money(focus ? focus.amount : total, { compact: true })}
         </text>
       </svg>
       <ul className="legend">
@@ -58,10 +60,10 @@ export function SpendingDonut({ data }: { data: Slice[] }) {
             onMouseLeave={() => setActive(null)}
             className={active === d.category ? 'is-active' : ''}
           >
-            <span className="swatch" style={{ background: categoryColor(d.category) }} />
+            <span className="swatch" style={{ background: color(d.category) }} />
             <span className="legend-name">{d.category}</span>
             <span className="legend-pct">{Math.round((d.amount / total) * 100)}%</span>
-            <span className="legend-amt num">{formatMoney(d.amount)}</span>
+            <span className="legend-amt num">{money(d.amount)}</span>
           </li>
         ))}
       </ul>
@@ -76,6 +78,7 @@ export function TrendChart({ data, selected, onSelect }: {
   selected: string;
   onSelect: (month: string) => void;
 }) {
+  const { money } = useFormat();
   // Measure the real width so text stays at true pixel size on small screens.
   const ref = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(560);
@@ -87,7 +90,7 @@ export function TrendChart({ data, selected, onSelect }: {
     return () => ro.disconnect();
   }, []);
   const H = W < 480 ? 180 : 220;
-  const PAD = { top: 12, right: 8, bottom: 26, left: 44 };
+  const PAD = { top: 12, right: 8, bottom: 26, left: 48 };
   const max = Math.max(1, ...data.flatMap((d) => [d.income, d.expense]));
   // Round the axis max up to a "nice" number.
   const mag = 10 ** Math.floor(Math.log10(max));
@@ -101,37 +104,37 @@ export function TrendChart({ data, selected, onSelect }: {
 
   return (
     <div ref={ref}>
-    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="trend" role="img" aria-label="Income and expenses by month">
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="grid" />
-          <text x={PAD.left - 8} y={y(t) + 4} textAnchor="end" className="axis">
-            {formatMoney(t, { compact: true })}
-          </text>
-        </g>
-      ))}
-      {data.map((d, i) => {
-        const cx = PAD.left + band * i + band / 2;
-        const isSel = d.month === selected;
-        return (
-          <g
-            key={d.month}
-            className={`trend-col ${isSel ? 'is-selected' : ''}`}
-            onClick={() => onSelect(d.month)}
-            role="button"
-            aria-label={`${monthLabel(d.month)}: income ${formatMoney(d.income)}, expenses ${formatMoney(d.expense)}`}
-          >
-            <rect x={cx - band / 2 + 2} y={PAD.top} width={band - 4} height={innerH} className="trend-hit" rx="6" />
-            <rect x={cx - barW - 1.5} y={y(d.income)} width={barW} height={y(0) - y(d.income)} rx="3" className="bar-income" />
-            <rect x={cx + 1.5} y={y(d.expense)} width={barW} height={y(0) - y(d.expense)} rx="3" className="bar-expense" />
-            <text x={cx} y={H - 8} textAnchor="middle" className={`axis ${isSel ? 'axis-strong' : ''}`}>
-              {monthLabel(d.month, 'short')}
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="trend" role="img" aria-label="Income and expenses by month">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="grid" />
+            <text x={PAD.left - 8} y={y(t) + 4} textAnchor="end" className="axis">
+              {money(t, { compact: true })}
             </text>
-            <title>{`${monthLabel(d.month)}\nIncome ${formatMoney(d.income)}\nExpenses ${formatMoney(d.expense)}`}</title>
           </g>
-        );
-      })}
-    </svg>
+        ))}
+        {data.map((d, i) => {
+          const cx = PAD.left + band * i + band / 2;
+          const isSel = d.month === selected;
+          return (
+            <g
+              key={d.month}
+              className={`trend-col ${isSel ? 'is-selected' : ''}`}
+              onClick={() => onSelect(d.month)}
+              role="button"
+              aria-label={`${monthLabel(d.month)}: income ${money(d.income)}, expenses ${money(d.expense)}`}
+            >
+              <rect x={cx - band / 2 + 2} y={PAD.top} width={band - 4} height={innerH} className="trend-hit" rx="6" />
+              <rect x={cx - barW - 1.5} y={y(d.income)} width={barW} height={y(0) - y(d.income)} rx="3" className="bar-income" />
+              <rect x={cx + 1.5} y={y(d.expense)} width={barW} height={y(0) - y(d.expense)} rx="3" className="bar-expense" />
+              <text x={cx} y={H - 8} textAnchor="middle" className={`axis ${isSel ? 'axis-strong' : ''}`}>
+                {monthLabel(d.month, 'short')}
+              </text>
+              <title>{`${monthLabel(d.month)}\nIncome ${money(d.income)}\nExpenses ${money(d.expense)}`}</title>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

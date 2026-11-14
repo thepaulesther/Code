@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { EXPENSE_CATEGORIES, formatMoney, parseAmount, type BudgetStatus, type Budgets } from '../lib/budget';
+import { parseAmount, type BudgetStatus, type Budgets } from '../lib/budget';
+import { useFormat } from '../lib/format';
 
-export function BudgetPanel({ status, budgets, onChange }: {
+export function BudgetPanel({ status, budgets, categories, onChange }: {
   status: BudgetStatus[];
   budgets: Budgets;
+  categories: string[];
   onChange: (b: Budgets) => void;
 }) {
+  const { money, symbol } = useFormat();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
 
   const startEdit = () => {
-    setDraft(Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c, budgets[c] ? String(budgets[c]) : ''])));
+    setDraft(Object.fromEntries(categories.map((c) => [c, budgets[c] ? String(budgets[c]) : ''])));
     setEditing(true);
   };
 
@@ -40,12 +43,13 @@ export function BudgetPanel({ status, budgets, onChange }: {
 
       {editing ? (
         <div className="budget-edit">
-          {EXPENSE_CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <label key={c} className="budget-edit-row">
               <span>{c}</span>
               <div className="money-input sm">
-                <span aria-hidden>$</span>
+                <span aria-hidden>{symbol}</span>
                 <input
+                  id={`budget-${c}`}
                   inputMode="decimal"
                   placeholder="No limit"
                   value={draft[c] ?? ''}
@@ -64,7 +68,7 @@ export function BudgetPanel({ status, budgets, onChange }: {
               <div className="budget-line">
                 <span className="budget-name">{b.category}</span>
                 <span className="num budget-nums">
-                  {formatMoney(b.spent)} <span className="muted">/ {formatMoney(b.limit)}</span>
+                  {money(b.spent)} <span className="muted">/ {money(b.limit)}</span>
                 </span>
               </div>
               <div
@@ -78,9 +82,7 @@ export function BudgetPanel({ status, budgets, onChange }: {
                 <div className="meter-fill" style={{ width: `${Math.min(b.ratio, 1) * 100}%` }} />
               </div>
               <span className="budget-note">
-                {b.state === 'over'
-                  ? `${formatMoney(-b.remaining)} over`
-                  : `${formatMoney(b.remaining)} left`}
+                {b.state === 'over' ? `${money(-b.remaining)} over` : `${money(b.remaining)} left`}
               </span>
             </li>
           ))}

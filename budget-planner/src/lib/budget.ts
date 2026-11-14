@@ -1,3 +1,5 @@
+import type { RecurringRule } from './recurring';
+
 export type TxType = 'income' | 'expense';
 
 export interface Transaction {
@@ -7,12 +9,13 @@ export interface Transaction {
   category: string;
   note: string;
   date: string; // YYYY-MM-DD
+  recurringId?: string; // set when created by a repeating rule
 }
 
 /** Monthly spending limit per expense category, e.g. { Groceries: 400 } */
 export type Budgets = Record<string, number>;
 
-export const EXPENSE_CATEGORIES = [
+export const DEFAULT_EXPENSE_CATEGORIES = [
   'Housing',
   'Groceries',
   'Dining',
@@ -22,15 +25,22 @@ export const EXPENSE_CATEGORIES = [
   'Entertainment',
   'Shopping',
   'Other',
-] as const;
+];
 
-export const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Gifts', 'Other income'] as const;
+export const DEFAULT_INCOME_CATEGORIES = ['Salary', 'Freelance', 'Gifts', 'Other income'];
 
-/** Stable categorical colour per expense category (CSS tokens --cat-1..9 in index.css). */
-export const categoryColor = (category: string) => {
-  const i = (EXPENSE_CATEGORIES as readonly string[]).indexOf(category);
-  return `var(--cat-${i === -1 ? 9 : i + 1})`;
-};
+export const CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NZD', 'JPY', 'CHF', 'SEK', 'NOK',
+  'DKK', 'PLN', 'INR', 'CNY', 'HKD', 'SGD', 'KRW', 'MXN', 'BRL', 'ZAR',
+];
+
+const PALETTE_SIZE = 12;
+
+/** Stable colour per expense category (CSS tokens --cat-1..12; --cat-0 for unknown/deleted ones). */
+export function categoryColor(category: string, expenseCategories: readonly string[]): string {
+  const i = expenseCategories.indexOf(category);
+  return i === -1 ? 'var(--cat-0)' : `var(--cat-${(i % PALETTE_SIZE) + 1})`;
+}
 
 /** "2026-11-14" -> "2026-11" */
 export const monthOf = (date: string): string => date.slice(0, 7);
@@ -50,6 +60,9 @@ export function monthLabel(month: string, style: 'long' | 'short' = 'long'): str
     timeZone: 'UTC',
   });
 }
+
+export const shortDate = (date: string) =>
+  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 export const inMonth = (txs: Transaction[], month: string) =>
   txs.filter((t) => monthOf(t.date) === month);
@@ -121,9 +134,9 @@ export function budgetStatus(txs: Transaction[], budgets: Budgets): BudgetStatus
     .sort((a, b) => b.ratio - a.ratio);
 }
 
-/** Parse a user-entered amount like "1,234.50" or "$12". Returns null if invalid or <= 0. */
+/** Parse a user-entered amount like "1,234.50", "$12" or "€9". Returns null if invalid or <= 0. */
 export function parseAmount(input: string): number | null {
-  const cleaned = input.replace(/[$,\s]/g, '');
+  const cleaned = input.trim().replace(/[^\d.,-]/g, '').replace(/,/g, '');
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
   const n = Number(cleaned);
   return n > 0 ? Math.round(n * 100) / 100 : null;
@@ -142,13 +155,46 @@ export function toCSV(txs: Transaction[]): string {
   return [header.join(','), ...rows].join('\n');
 }
 
-export const formatMoney = (n: number, opts: { compact?: boolean } = {}) =>
-  new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    notation: opts.compact ? 'compact' : 'standard',
-    maximumFractionDigits: opts.compact ? 1 : 2,
-  }).format(n);
+const fmtCache = new Map<string, Intl.NumberFormat>();
+
+export function formatMoney(n: number, currency = 'USD', opts: { compact?: boolean } = {}): string {
+  const key = `${currency}|${opts.compact ? 'c' : 's'}`;
+  let f = fmtCache.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat(
+        undefined,
+        opts.compact
+          ? { style: 'currency', currency, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+          : { style: 'currency', currency },
+      );
+    } catch {
+      f = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+    }
+    fmtCache.set(key, f);
+  }
+  return f.format(n);
+}
+
+export function currencySymbol(currency: string): string {
+  try {
+    return (
+      new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' })
+        .formatToParts(0)
+        .find((p) => p.type === 'currency')?.value ?? currency
+    );
+  } catch {
+    return currency;
+  }
+}
+
+export function currencyName(currency: string): string {
+  try {
+    return new Intl.DisplayNames(undefined, { type: 'currency' }).of(currency) ?? currency;
+  } catch {
+    return currency;
+  }
+}
 
 export const todayISO = () => {
   const d = new Date();
@@ -160,16 +206,25 @@ export const newId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-/** Sample data so the first visit isn't an empty screen. */
-export function sampleData(month: string): { transactions: Transaction[]; budgets: Budgets } {
+/** Sample data so the first visit isn't an empty screen. Rent and salary are repeating rules. */
+export function sampleData(month: string): {
+  transactions: Transaction[];
+  budgets: Budgets;
+  recurring: RecurringRule[];
+} {
   const d = (m: string, day: number) => `${m}-${String(day).padStart(2, '0')}`;
+  const recurring: RecurringRule[] = [
+    { id: 'sample-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', day: 1, startMonth: shiftMonth(month, -3), lastGenerated: month },
+    { id: 'sample-rent', type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', day: 2, startMonth: shiftMonth(month, -3), lastGenerated: month },
+  ];
   const transactions: Transaction[] = [];
   for (let i = 0; i < 4; i++) {
     const m = shiftMonth(month, -i);
     const wobble = (base: number, k: number) => Math.round(base * (1 + ((i * 7 + k) % 5) * 0.06));
+    for (const r of recurring) {
+      transactions.push({ id: `${r.id}:${m}`, type: r.type, amount: r.amount, category: r.category, note: r.note, date: d(m, r.day), recurringId: r.id });
+    }
     transactions.push(
-      { id: newId(), type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', date: d(m, 1) },
-      { id: newId(), type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', date: d(m, 2) },
       { id: newId(), type: 'expense', amount: wobble(320, 1), category: 'Groceries', note: 'Weekly shops', date: d(m, 6) },
       { id: newId(), type: 'expense', amount: wobble(140, 2), category: 'Dining', note: 'Eating out', date: d(m, 9) },
       { id: newId(), type: 'expense', amount: wobble(95, 3), category: 'Transport', note: 'Transit pass', date: d(m, 3) },
@@ -182,5 +237,6 @@ export function sampleData(month: string): { transactions: Transaction[]; budget
   return {
     transactions,
     budgets: { Groceries: 380, Dining: 150, Transport: 120, Entertainment: 100, Shopping: 200 },
+    recurring,
   };
 }

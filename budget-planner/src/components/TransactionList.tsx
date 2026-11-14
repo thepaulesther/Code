@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { categoryColor, formatMoney, type Transaction } from '../lib/budget';
+import { shortDate, type Transaction } from '../lib/budget';
+import { useFormat } from '../lib/format';
 
 type Filter = 'all' | 'income' | 'expense';
 
@@ -7,6 +8,7 @@ export function TransactionList({ transactions, onDelete }: {
   transactions: Transaction[];
   onDelete: (id: string) => void;
 }) {
+  const { money, color } = useFormat();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
 
@@ -26,6 +28,7 @@ export function TransactionList({ transactions, onDelete }: {
       </div>
       <div className="list-tools">
         <input
+          id="tx-search"
           type="search"
           placeholder="Search notes or categories"
           value={query}
@@ -41,25 +44,24 @@ export function TransactionList({ transactions, onDelete }: {
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="empty">Nothing here yet. Add a transaction to get started.</p>
+        <p className="empty">
+          {transactions.length ? 'No transactions match.' : 'Nothing here yet. Add a transaction or import a CSV to get started.'}
+        </p>
       ) : (
         <ul className="rows">
           {rows.map((t) => (
             <li key={t.id}>
-              <span
-                className="dot"
-                style={{ background: t.type === 'income' ? 'var(--income)' : categoryColor(t.category) }}
-              />
+              <span className="dot" style={{ background: t.type === 'income' ? 'var(--income)' : color(t.category) }} />
               <div className="row-main">
-                <span className="row-title">{t.note || t.category}</span>
-                <span className="row-sub">
-                  {t.category} ·{' '}
-                  {new Date(t.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                <span className="row-title">
+                  {t.note || t.category}
+                  {t.recurringId && <span className="badge" title="Repeats monthly">↻ monthly</span>}
                 </span>
+                <span className="row-sub">{t.category} · {shortDate(t.date)}</span>
               </div>
               <span className={`num row-amt ${t.type}`}>
                 {t.type === 'income' ? '+' : '−'}
-                {formatMoney(t.amount)}
+                {money(t.amount)}
               </span>
               <button
                 type="button"
