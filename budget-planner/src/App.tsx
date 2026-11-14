@@ -26,6 +26,7 @@ import {
   type Transaction,
   type TxType,
 } from './lib/budget';
+import type { AppData } from './lib/store';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
@@ -113,8 +114,13 @@ const PAGE_TITLES: Record<Route, string> = {
 
 type DialogName = 'import' | 'export' | null;
 
-export default function App() {
-  const [data, setData] = useAppData();
+export default function App({ initial, notice }: {
+  /** The saved data, already opened and checked (see Root). */
+  initial: AppData;
+  /** A message to show once on start, e.g. after an upgrade. */
+  notice?: string;
+}) {
+  const [data, setData, saveStatus] = useAppData(initial);
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
@@ -122,7 +128,7 @@ export default function App() {
   const [adding, setAdding] = useState<TxType | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(notice ? { text: notice } : null);
   const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
   const install = useInstallPrompt();
   const online = useOnline();
@@ -892,6 +898,25 @@ export default function App() {
         <Sidebar route={route} online={online} onInstall={install} />
         <MobileTopBar online={online} />
         <Main>
+          {saveStatus.newerElsewhere && (
+            <div className="alert-banner level-over-plan" role="alert">
+              <span className="alert-icon"><Icon name="alert" size={20} /></span>
+              <div>
+                <strong>Elora was updated in another tab</strong>
+                <p>To keep your data safe, changes made in this tab aren’t being saved. Reload to use the new version.</p>
+              </div>
+              <button type="button" className="btn-secondary sm" onClick={() => window.location.reload()}>Reload</button>
+            </div>
+          )}
+          {saveStatus.saveFailed && !saveStatus.newerElsewhere && (
+            <div className="alert-banner level-over-plan" role="alert">
+              <span className="alert-icon"><Icon name="alert" size={20} /></span>
+              <div>
+                <strong>Your latest change couldn’t be saved</strong>
+                <p>This browser refused to store it, usually because its storage is full. Download a backup in Settings › Your data before closing Elora.</p>
+              </div>
+            </div>
+          )}
           <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
         </Main>
         <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
