@@ -4,7 +4,7 @@ import { SpendingDonut, TrendChart } from './components/Charts';
 import { ExportDialog } from './components/ExportDialog';
 import { ImportDialog } from './components/ImportDialog';
 import { RecurringPanel } from './components/RecurringPanel';
-import { SettingsDialog } from './components/SettingsDialog';
+import { SettingsPanel } from './components/SettingsPanel';
 import { Modal } from './components/Modal';
 import { TransactionForm, type RepeatEvery, type SubmitOptions } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
@@ -24,6 +24,7 @@ import {
   todayISO,
   totals,
   type Transaction,
+  type TxType,
 } from './lib/budget';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
@@ -45,27 +46,47 @@ import {
   useAppData,
 } from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
-import { GoalsPanel } from './components/GoalsPanel';
+import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
 import { PlanCard } from './components/PlanCard';
 import { playAlarm, sendNotification } from './lib/alarm';
 import {
   ALERT_RANK,
   alertFor,
   buildPlan,
+  goalSaved,
   suggestedEmergencyTarget,
   type Goal,
   type PlanSettings,
 } from './lib/plan';
+import { hrefFor, navigate, useRoute, type Route } from './lib/route';
+import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { Icon } from './components/ui/Icon';
+import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
+import { EmptyState } from './components/ui/EmptyState';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
-type DialogName = 'settings' | 'import' | 'export' | null;
+const PAGE_TITLES: Record<Route, string> = {
+  overview: 'Overview',
+  transactions: 'Transactions',
+  budgets: 'Budgets',
+  savings: 'Savings',
+  insights: 'Financial insights',
+  plans: 'Monthly plan',
+  settings: 'Settings',
+};
+
+type DialogName = 'import' | 'export' | null;
 
 export default function App() {
   const [data, setData] = useAppData();
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
+  const route = useRoute();
+  const [adding, setAdding] = useState<TxType | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
   const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
@@ -217,8 +238,12 @@ export default function App() {
         replaced ? () => setData(before) : undefined,
       );
     } else {
+      const before = data;
       setData((d) => ({ ...d, transactions: [...d.transactions, tx] }));
-      if (spreadNote) setToast(`Added.${spreadNote}`);
+      setToast(
+        `Added ${tx.type === 'income' ? '' : '−'}${money(tx.amount)} ${tx.note ? `“${tx.note}”` : tx.category}.${spreadNote}`,
+        () => setData(before),
+      );
     }
     setMonth(monthOf(tx.date));
   };
@@ -288,206 +313,411 @@ export default function App() {
     return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}% vs last month`;
   };
 
+  // Each page starts at the top, moves focus to its heading (for screen readers) and names the tab.
+  const firstRoute = useRef(true);
+  useEffect(() => {
+    document.title = route === 'overview' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
+    if (firstRoute.current) {
+      firstRoute.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+    document.getElementById('page-title')?.focus({ preventScroll: true });
+  }, [route]);
+
+  const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
+  const seeAll = (r: Route, label = 'See all') => (
+    <a className="link-more" href={hrefFor(r)}>
+      {label}
+      <Icon name="chevron-right" size={16} />
+    </a>
+  );
+  const monthSwitch = <MonthSwitcher month={month} currentMonth={CURRENT_MONTH} onChange={setMonth} />;
+  const addButton = (
+    <button type="button" className="btn-primary auto desktop-only" onClick={() => setAdding('expense')}>
+      <Icon name="plus" size={18} />
+      Add transaction
+    </button>
+  );
+  const importButton = (
+    <button
+      type="button"
+      className="btn-secondary"
+      onClick={() => setDialog('import')}
+      disabled={!settings.currency}
+      title={settings.currency ? undefined : 'Choose your currency first'}
+    >
+      <Icon name="import" size={18} />
+      Import
+    </button>
+  );
+  const exportButton = (
+    <button type="button" className="btn-secondary" onClick={() => setDialog('export')} disabled={!transactions.length}>
+      <Icon name="export" size={18} />
+      Export
+    </button>
+  );
+
+  const welcome = isEmpty(data) && (
+    <section className="welcome" aria-labelledby="welcome-title">
+      <span className="welcome-icon"><Icon name="leaf" size={26} /></span>
+      <div>
+        <h2 id="welcome-title">Welcome to Elora</h2>
+        <p className="welcome-lead">Your budget is empty. Three short steps and you’re set up.</p>
+        <ol>
+          <li>
+            <div>
+              <label htmlFor="welcome-currency">Choose the currency your totals should be in</label>
+              <CurrencySelect id="welcome-currency" label="Base currency" value={settings.currency} onChange={chooseBase} />
+            </div>
+          </li>
+          <li>
+            <div>
+              Add your income and spending with <strong>Add transaction</strong>. Amounts in other currencies are converted.
+            </div>
+          </li>
+          <li>
+            <div>
+              For bills paid once a year, such as rent, set <strong>Repeats: Every year</strong>. The cost then counts as one
+              twelfth in each month.
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+  );
+
+  const sampleBanner = hasSamples(data) && (
+    <div className="sample-banner" role="note">
+      <p>
+        <strong>You’re looking at example data.</strong> Items marked <span className="badge example">example</span>{' '}
+        (including a monthly rent and salary) are counted in your totals. Remove them once you’ve added your own.
+      </p>
+      <button type="button" className="btn-primary sm" onClick={removeExamples}>Remove examples</button>
+    </div>
+  );
+
+  const alertBanner = alert && (
+    <div className={`alert-banner level-${alert.level}`} role="alert">
+      <span className="alert-icon"><Icon name="alert" size={20} /></span>
+      <div>
+        <strong>{alert.title}</strong>
+        <p>{alert.detail}</p>
+      </div>
+    </div>
+  );
+
+  const needCurrency = (what: string) => (
+    <section className="card">
+      <EmptyState
+        icon="wallet"
+        title="Choose your currency first"
+        action={<a className="btn-primary" href={hrefFor('settings')}>Open settings</a>}
+      >
+        {what} use your base currency. Pick it in Settings or the welcome card on the Overview.
+      </EmptyState>
+    </section>
+  );
+
+  const stats = (
+    <section className="stats" aria-label={`${monthLabel(month)} in numbers`}>
+      <div className="stat">
+        <span className="stat-label">Income</span>
+        <span className="stat-value num income">{money(t.income)}</span>
+        <span className="stat-sub">{delta(t.income, prev.income) ?? ' '}</span>
+      </div>
+      <div className="stat">
+        <span className="stat-label">Spending</span>
+        <span className="stat-value num">{money(t.expense)}</span>
+        <span className="stat-sub">{delta(t.expense, prev.expense) ?? ' '}</span>
+      </div>
+      <div className="stat">
+        <span className="stat-label">Net</span>
+        <span className={`stat-value num ${t.net < 0 ? 'danger' : ''}`}>{money(t.net)}</span>
+        <span className="stat-sub">{t.net >= 0 ? 'left over this month' : 'overspent this month'}</span>
+      </div>
+      <div className="stat">
+        <span className="stat-label">Savings rate</span>
+        <span className="stat-value num">{Math.round(t.savingsRate * 100)}%</span>
+        <span className="stat-sub">of income kept</span>
+      </div>
+    </section>
+  );
+
+  const trendCard = (
+    <section className="card">
+      <div className="card-head">
+        <h2>
+          Income and spending
+          <span className="card-sub">Last 6 months. Select a month to view it.</span>
+        </h2>
+        <div className="key">
+          <span><i className="k-income" /> Income</span>
+          <span><i className="k-expense" /> Spending</span>
+        </div>
+      </div>
+      <TrendChart data={trend} selected={month} onSelect={setMonth} />
+    </section>
+  );
+
+  const donutCard = (
+    <section className="card">
+      <div className="card-head">
+        <h2>
+          Where it went
+          <span className="card-sub">Spending by category, {monthLabel(month)}</span>
+        </h2>
+      </div>
+      <SpendingDonut data={byCategory} />
+    </section>
+  );
+
+  const recurringPanel = (
+    <RecurringPanel
+      rules={recurring}
+      rateFor={rateFor}
+      paymentCount={(id) => transactions.filter((x) => x.recurringId === id).length}
+      onToggle={toggleRule}
+      onDelete={deleteRule}
+    />
+  );
+
+  const txList = (
+    <TransactionList
+      transactions={monthTx}
+      onDelete={remove}
+      onEdit={setEditingId}
+      title={monthLabel(month)}
+      emptyAction={
+        <button type="button" className="btn-primary" onClick={() => setAdding('expense')}>
+          <Icon name="plus" size={18} /> Add transaction
+        </button>
+      }
+    />
+  );
+
+  const page = (() => {
+    switch (route) {
+      case 'transactions':
+        return (
+          <>
+            <PageHeader
+              title="Transactions"
+              subtitle={`Everything you’ve recorded for ${monthLabel(month)}, including this month’s share of spread payments.`}
+              actions={<>{monthSwitch}{importButton}{exportButton}{addButton}</>}
+            />
+            {sampleBanner}
+            {alertBanner}
+            <div className="section-grid">
+              <div className="span-8">{txList}</div>
+              <div className="span-4 stack">
+                {recurringPanel}
+                <p className="fineprint">Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}</p>
+              </div>
+            </div>
+          </>
+        );
+
+      case 'budgets':
+        return (
+          <>
+            <PageHeader
+              title="Budgets"
+              subtitle="Monthly limits by category. Bars turn amber at 80% and red when you go over."
+              actions={<>{monthSwitch}{addButton}</>}
+            />
+            {alertBanner}
+            <div className="section-grid">
+              <div className="span-7">
+                <BudgetPanel
+                  status={status}
+                  budgets={budgets}
+                  categories={settings.expenseCategories}
+                  onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
+                />
+              </div>
+              <div className="span-5">{donutCard}</div>
+            </div>
+          </>
+        );
+
+      case 'savings': {
+        const totalSaved = goals.reduce((s, g) => s + goalSaved(g), 0);
+        const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+        const monthlyAside = currentPlan.goalsTotal + currentPlan.emergency;
+        return (
+          <>
+            <PageHeader
+              title="Savings"
+              subtitle="Your goals, your emergency fund, and how much to put aside each month to reach them."
+            />
+            {!settings.currency ? (
+              needCurrency('Savings goals')
+            ) : (
+              <>
+                {goals.length > 0 && (
+                  <section className="summary-tiles" aria-label="Savings summary">
+                    <div className="stat">
+                      <span className="stat-label">Saved so far</span>
+                      <span className="stat-value num">{money(totalSaved)}</span>
+                      <span className="stat-sub">of {money(totalTarget)} across {goals.length} {goals.length === 1 ? 'goal' : 'goals'}</span>
+                    </div>
+                    <div className="stat">
+                      <span className="stat-label">Set aside each month</span>
+                      <span className="stat-value num">{money(monthlyAside)}</span>
+                      <span className="stat-sub">from your monthly plan</span>
+                    </div>
+                    <div className="stat">
+                      <span className="stat-label">Progress</span>
+                      <span className="stat-value num">{totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0}%</span>
+                      <span className="stat-sub">of everything you’re saving for</span>
+                    </div>
+                  </section>
+                )}
+                <GoalsPanel
+                  goals={goals}
+                  allocations={currentPlan.goals}
+                  emergencyMonthly={currentPlan.emergency}
+                  emergencyMonths={planSettings.emergencyMonths}
+                  onDialog={setGoalDialog}
+                  onDelete={removeGoal}
+                  onAddMoney={addMoneyToGoal}
+                />
+              </>
+            )}
+          </>
+        );
+      }
+
+      case 'insights':
+        return (
+          <>
+            <PageHeader
+              title="Financial insights"
+              subtitle="How your money moved this month and over the last six."
+              actions={monthSwitch}
+            />
+            {alertBanner}
+            {stats}
+            <div className="section-grid">
+              <div className="span-7">{trendCard}</div>
+              <div className="span-5">{donutCard}</div>
+            </div>
+          </>
+        );
+
+      case 'plans':
+        return (
+          <>
+            <PageHeader
+              title="Monthly plan"
+              subtitle="How much you can spend while still paying your bills and saving for your goals."
+              actions={monthSwitch}
+            />
+            {alertBanner}
+            {!settings.currency ? (
+              needCurrency('Plans')
+            ) : (
+              <div className="section-grid">
+                <div className="span-7">
+                  <PlanCard
+                    plan={plan}
+                    month={month}
+                    isCurrentMonth={month === CURRENT_MONTH}
+                    expectedIncome={planSettings.income}
+                    onSetIncome={(income) => setPlanSettings({ income })}
+                    onAddGoal={() => setGoalDialog('new')}
+                    hasGoals={goals.length > 0}
+                  />
+                </div>
+                <div className="span-5">{recurringPanel}</div>
+              </div>
+            )}
+          </>
+        );
+
+      case 'settings':
+        return (
+          <>
+            <PageHeader title="Settings" subtitle="Appearance, currency, plan and alerts, categories and your data." />
+            <SettingsPanel
+              onReset={() => navigate('overview')}
+              data={data}
+              setData={setData}
+              showInstallHelp={!IS_ARTIFACT}
+              ratesStatus={ratesStatus}
+              onRefreshRates={refreshRates}
+            />
+          </>
+        );
+
+      default:
+        return (
+          <>
+            {/* ---- Overview ---- */}
+            <PageHeader title="Overview" actions={<>{monthSwitch}{addButton}</>} />
+            {welcome}
+            {sampleBanner}
+            {alertBanner}
+            {stats}
+            <TransactionList
+              transactions={monthTx}
+              onDelete={remove}
+              onEdit={setEditingId}
+              recent={5}
+              title="Recent activity"
+              action={seeAll('transactions')}
+            />
+            {/* ---- /Overview ---- */}
+          </>
+        );
+    }
+  })();
+
   return (
     <PrefsContext.Provider value={prefs}>
-      <div className="app">
-        <header className="topbar">
-          <div className="brand">
-            <svg className="logo" viewBox="0 0 32 32" aria-hidden>
-              <circle cx="16" cy="16" r="13" fill="var(--accent)" />
-              <path d="M16 3a13 13 0 0 1 0 26z" fill="var(--income)" />
-            </svg>
-            <h1>Ledgerly</h1>
-            {!online && <span className="pill offline">Offline</span>}
-          </div>
-          <div className="month-nav">
-            <button type="button" className="icon-btn" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
-            <span className="month-name">{monthLabel(month)}</span>
-            <button type="button" className="icon-btn" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">›</button>
-            {month !== CURRENT_MONTH && (
-              <button type="button" className="btn-ghost" onClick={() => setMonth(CURRENT_MONTH)}>Today</button>
-            )}
-          </div>
-          <div className="top-actions">
-            {install && <button type="button" className="btn-ghost accent" onClick={install}>Install app</button>}
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => setDialog('import')}
-              disabled={!settings.currency}
-              title={settings.currency ? undefined : 'Choose your currency first'}
-            >
-              Import
-            </button>
-            <button type="button" className="btn-ghost" onClick={() => setDialog('export')} disabled={!transactions.length}>Export</button>
-            <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
-          </div>
-        </header>
+      <div className="shell">
+        <button type="button" className="skip-link" onClick={() => document.getElementById('page-title')?.focus()}>
+          Skip to content
+        </button>
+        <Sidebar route={route} online={online} onInstall={install} />
+        <MobileTopBar online={online} />
+        <Main>
+          <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
+        </Main>
+        <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
+        {route !== 'settings' && <AddFab onClick={() => setAdding('expense')} />}
 
-        {isEmpty(data) && (
-          <section className="welcome" aria-labelledby="welcome-title">
-            <h2 id="welcome-title">Your budget is empty. Let’s set it up.</h2>
-            <ol>
-              <li>
-                <span>Choose the currency your totals should be in:</span>
-                <CurrencySelect
-                  id="welcome-currency"
-                  label="Base currency"
-                  value={settings.currency}
-                  onChange={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
-                />
-              </li>
-              <li>Add your income and expenses with the <strong>Add transaction</strong> form. Amounts in other currencies are converted.</li>
-              <li>
-                For bills paid once a year, such as rent, set <strong>Repeats: Every year</strong>. The cost then counts
-                as one twelfth in each month.
-              </li>
-            </ol>
-          </section>
-        )}
-
-        {hasSamples(data) && (
-          <div className="sample-banner" role="note">
-            <p>
-              <strong>You’re looking at example data.</strong> Items marked <span className="badge example">example</span>{' '}
-              (including a monthly rent and salary) are counted in your totals. Remove them once you’ve added your own.
-            </p>
-            <button type="button" className="btn-primary sm" onClick={removeExamples}>Remove examples</button>
-          </div>
-        )}
-
-        {alert && (
-          <div className={`alert-banner level-${alert.level}`} role="alert">
-            <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden className="alert-icon">
-              <path d="M10 2 1.5 17h17z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <path d="M10 8v4M10 14.5v.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-            <div>
-              <strong>{alert.title}</strong>
-              <p>{alert.detail}</p>
-            </div>
-          </div>
-        )}
-
-        <section className="stats">
-          <div className="stat">
-            <span className="stat-label">Income</span>
-            <span className="stat-value num income">{money(t.income)}</span>
-            <span className="stat-sub">{delta(t.income, prev.income) ?? ' '}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Expenses</span>
-            <span className="stat-value num expense">{money(t.expense)}</span>
-            <span className="stat-sub">{delta(t.expense, prev.expense) ?? ' '}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Net</span>
-            <span className={`stat-value num ${t.net < 0 ? 'expense' : ''}`}>{money(t.net)}</span>
-            <span className="stat-sub">{t.net >= 0 ? 'left over this month' : 'overspent this month'}</span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Savings rate</span>
-            <span className="stat-value num">{Math.round(t.savingsRate * 100)}%</span>
-            <span className="stat-sub">of income kept</span>
-          </div>
-        </section>
-
-        <main className="grid">
-          <div className="col-main">
-            {settings.currency && (
-              <PlanCard
-                plan={plan}
-                month={month}
-                isCurrentMonth={month === CURRENT_MONTH}
-                expectedIncome={planSettings.income}
-                onSetIncome={(income) => setPlanSettings({ income })}
-                onAddGoal={() => setGoalDialog('new')}
-                hasGoals={goals.length > 0}
-              />
-            )}
-            <section className="card">
-              <div className="card-head">
-                <h2>Last 6 months</h2>
-                <div className="key">
-                  <span><i className="k-income" /> Income</span>
-                  <span><i className="k-expense" /> Expenses</span>
-                </div>
-              </div>
-              <TrendChart data={trend} selected={month} onSelect={setMonth} />
-            </section>
-
-            <div className="pair">
-              <section className="card">
-                <div className="card-head"><h2>Where it went</h2></div>
-                <SpendingDonut data={byCategory} />
-              </section>
-              <BudgetPanel
-                status={status}
-                budgets={budgets}
-                categories={settings.expenseCategories}
-                onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
-              />
-            </div>
-
-            {settings.currency && (
-              <GoalsPanel
-                goals={goals}
-                allocations={plan.goals}
-                emergencyMonthly={plan.emergency}
-                emergencyMonths={planSettings.emergencyMonths}
-                suggestedEmergency={suggestedEmergencyTarget(transactions, CURRENT_MONTH)}
-                dialogOpen={goalDialog}
-                onDialog={setGoalDialog}
-                onSave={saveGoalAndMoney}
-                onDelete={removeGoal}
-                onAddMoney={addMoneyToGoal}
-              />
-            )}
-
-            <TransactionList transactions={monthTx} onDelete={remove} onEdit={setEditingId} />
-          </div>
-
-          <aside className="col-side">
+        <MoreSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          route={route}
+          onImport={() => setDialog('import')}
+          onExport={() => setDialog('export')}
+          onInstall={install}
+          canImport={!!settings.currency}
+          canExport={transactions.length > 0}
+        />
+        <Modal open={adding != null} onClose={() => setAdding(null)} title="Add transaction">
+          {adding && (
             <TransactionForm
+              key={adding}
+              bare
+              initialType={adding}
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
               rates={data.rates}
               ratesStatus={ratesStatus}
               onRefreshRates={refreshRates}
               recurring={recurring}
-              onAdd={add}
-              onChooseBase={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
+              onAdd={(tx, repeat, opts) => {
+                add(tx, repeat, opts);
+                setAdding(null);
+              }}
+              onChooseBase={chooseBase}
             />
-            <RecurringPanel
-              rules={recurring}
-              rateFor={rateFor}
-              paymentCount={(id) => transactions.filter((x) => x.recurringId === id).length}
-              onToggle={toggleRule}
-              onDelete={deleteRule}
-            />
-            <p className="fineprint">
-              Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}
-            </p>
-          </aside>
-        </main>
-
-        <SettingsDialog
-          open={dialog === 'settings'}
-          onClose={() => setDialog(null)}
-          data={data}
-          setData={setData}
-          showInstallHelp={!IS_ARTIFACT}
-          ratesStatus={ratesStatus}
-          onRefreshRates={refreshRates}
-        />
-        <ImportDialog
-          open={dialog === 'import'}
-          onClose={() => setDialog(null)}
-          data={data}
-          onImport={importTxs}
-          ratesStatus={ratesStatus}
-          onRefreshRates={refreshRates}
-        />
+          )}
+        </Modal>
         <Modal open={!!editingTx} onClose={() => setEditingId(null)} title="Edit transaction">
           {editingTx && (
             <TransactionForm
@@ -500,10 +730,25 @@ export default function App() {
               onRefreshRates={refreshRates}
               recurring={recurring}
               onAdd={saveEdit}
-              onChooseBase={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
+              onChooseBase={chooseBase}
             />
           )}
         </Modal>
+        <GoalDialog
+          goals={goals}
+          open={goalDialog}
+          onClose={() => setGoalDialog(null)}
+          suggestedEmergency={suggestedEmergencyTarget(transactions, CURRENT_MONTH)}
+          onSave={saveGoalAndMoney}
+        />
+        <ImportDialog
+          open={dialog === 'import'}
+          onClose={() => setDialog(null)}
+          data={data}
+          onImport={importTxs}
+          ratesStatus={ratesStatus}
+          onRefreshRates={refreshRates}
+        />
         <ExportDialog
           open={dialog === 'export'}
           onClose={() => setDialog(null)}
@@ -514,7 +759,7 @@ export default function App() {
 
         {toast && (
           <div className="toast" role="status">
-            {toast.text}
+            <span>{toast.text}</span>
             {toast.undo && (
               <button
                 type="button"
@@ -527,7 +772,9 @@ export default function App() {
                 Undo
               </button>
             )}
-            <button type="button" className="icon-btn" onClick={() => setToastState(null)} aria-label="Dismiss">×</button>
+            <button type="button" className="icon-btn" onClick={() => setToastState(null)} aria-label="Dismiss">
+              <Icon name="close" size={16} />
+            </button>
           </div>
         )}
       </div>

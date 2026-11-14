@@ -1,26 +1,27 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { monthLabel, monthOf, newId, parseAmount, todayISO } from '../lib/budget';
 import { useFormat } from '../lib/format';
 import { goalProgress, goalRemaining, goalSaved, type Goal, type GoalAllocation } from '../lib/plan';
 import { Modal } from './Modal';
+import { EmptyState } from './ui/EmptyState';
+import { Icon } from './ui/Icon';
 
 const PRESETS = ['Car', 'Property', 'New phone', 'Emergency fund'];
 
-export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMonths, suggestedEmergency, dialogOpen, onDialog, onSave, onDelete, onAddMoney }: {
+export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMonths, onDialog, onDelete, onAddMoney, summary, action }: {
   goals: Goal[];
   /** From the plan: how much each goal gets a month. */
   allocations: GoalAllocation[];
   emergencyMonthly: number;
   emergencyMonths: number;
-  /** 3 months of average spending, offered as the emergency-fund target. */
-  suggestedEmergency: number;
-  /** The goal being edited, 'new' for a new one, or null when the dialog is closed. */
-  dialogOpen: Goal | 'new' | null;
-  onDialog: (g: Goal | 'new' | null) => void;
-  /** Save a goal; `savedChange` is money to add (or remove) so "saved so far" matches what was typed. */
-  onSave: (g: Goal, savedChange: number) => void;
+  /** Open the goal dialog: a goal to edit, or 'new'. */
+  onDialog: (g: Goal | 'new') => void;
   onDelete: (id: string) => void;
   onAddMoney: (id: string, amount: number) => void;
+  /** Read-only glance (Overview): the first three goals, no buttons. */
+  summary?: boolean;
+  /** Shown in the header in summary mode, e.g. a "Manage" link. */
+  action?: ReactNode;
 }) {
   const { money } = useFormat();
   const [moneyFor, setMoneyFor] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const sorted = [...goals].sort((a, b) => Number(b.kind === 'emergency') - Number(a.kind === 'emergency'));
-  const hasEmergency = goals.some((g) => g.kind === 'emergency');
+  const shown = summary ? sorted.slice(0, 3) : sorted;
 
   const submitMoney = (id: string, sign: 1 | -1) => {
     const n = parseAmount(moneyText);
@@ -64,18 +65,35 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
   return (
     <section className="card goals">
       <div className="card-head">
-        <h2>Savings goals</h2>
-        <button type="button" className="btn-ghost accent" onClick={() => onDialog('new')}>New goal</button>
+        <h2>
+          Savings goals
+          {summary && goals.length > 3 && <span className="card-sub">{goals.length - 3} more</span>}
+        </h2>
+        {summary ? action : (
+          <button type="button" className="btn-secondary sm" onClick={() => onDialog('new')}>
+            <Icon name="plus" size={16} /> New goal
+          </button>
+        )}
       </div>
 
       {goals.length === 0 ? (
-        <p className="empty">
-          Saving for a car, a property or a new phone? Add a goal with its price and when you want it, and Elora works
-          out how much to put aside each month. An emergency fund is a good first goal.
-        </p>
+        <EmptyState
+          icon="savings"
+          title="No savings goals yet"
+          compact={summary}
+          action={
+            <button type="button" className={summary ? 'btn-secondary sm' : 'btn-primary'} onClick={() => onDialog('new')}>
+              <Icon name="plus" size={16} /> Add a goal
+            </button>
+          }
+        >
+          {summary
+            ? 'An emergency fund is a good first goal.'
+            : 'Saving for a car, a property or a new phone? Add a goal with its price and when you want it, and Elora works out how much to put aside each month. An emergency fund is a good first goal.'}
+        </EmptyState>
       ) : (
         <ul className="goal-rows">
-          {sorted.map((g) => {
+          {shown.map((g) => {
             const saved = goalSaved(g);
             const done = goalRemaining(g) <= 0;
             return (
@@ -100,7 +118,7 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
                 </div>
                 <p className="goal-plan">{planLine(g)}</p>
 
-                {moneyFor === g.id ? (
+                {summary ? null : moneyFor === g.id ? (
                   <form className="goal-money" onSubmit={(e) => { e.preventDefault(); submitMoney(g.id, 1); }}>
                     <input
                       id={`goal-money-${g.id}`}
@@ -124,9 +142,11 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
                   </div>
                 ) : (
                   <div className="goal-actions">
-                    <button type="button" className="btn-ghost accent" onClick={() => { setMoneyFor(g.id); setMoneyText(''); }}>Add money</button>
+                    <button type="button" className="btn-ghost accent" onClick={() => { setMoneyFor(g.id); setMoneyText(''); }}>
+                      <Icon name="plus" size={16} /> Add money
+                    </button>
                     <button type="button" className="btn-ghost" onClick={() => onDialog(g)}>Edit</button>
-                    <button type="button" className="btn-ghost" onClick={() => setConfirmDelete(g.id)}>Delete</button>
+                    <button type="button" className="btn-ghost danger" onClick={() => setConfirmDelete(g.id)}>Delete</button>
                   </div>
                 )}
               </li>
@@ -134,19 +154,34 @@ export function GoalsPanel({ goals, allocations, emergencyMonthly, emergencyMont
           })}
         </ul>
       )}
-
-      <Modal open={dialogOpen != null} onClose={() => onDialog(null)} title={dialogOpen === 'new' ? 'New savings goal' : 'Edit goal'}>
-        {dialogOpen != null && (
-          <GoalForm
-            key={dialogOpen === 'new' ? 'new' : dialogOpen.id}
-            goal={dialogOpen === 'new' ? undefined : dialogOpen}
-            emergencyTaken={hasEmergency && (dialogOpen === 'new' || dialogOpen.kind !== 'emergency')}
-            suggestedEmergency={suggestedEmergency}
-            onSave={(g, change) => { onSave(g, change); onDialog(null); }}
-          />
-        )}
-      </Modal>
     </section>
+  );
+}
+
+/** New/edit goal dialog. Lives at app level so "Add a goal" works from any page. */
+export function GoalDialog({ goals, open, onClose, suggestedEmergency, onSave }: {
+  goals: Goal[];
+  /** The goal being edited, 'new' for a new one, or null when closed. */
+  open: Goal | 'new' | null;
+  onClose: () => void;
+  /** 3 months of average spending, offered as the emergency-fund target. */
+  suggestedEmergency: number;
+  /** Save a goal; `savedChange` is money to add (or remove) so "saved so far" matches what was typed. */
+  onSave: (g: Goal, savedChange: number) => void;
+}) {
+  const hasEmergency = goals.some((g) => g.kind === 'emergency');
+  return (
+    <Modal open={open != null} onClose={onClose} title={open === 'new' ? 'New savings goal' : 'Edit goal'}>
+      {open != null && (
+        <GoalForm
+          key={open === 'new' ? 'new' : open.id}
+          goal={open === 'new' ? undefined : open}
+          emergencyTaken={hasEmergency && (open === 'new' || open.kind !== 'emergency')}
+          suggestedEmergency={suggestedEmergency}
+          onSave={(g, change) => { onSave(g, change); onClose(); }}
+        />
+      )}
+    </Modal>
   );
 }
 

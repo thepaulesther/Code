@@ -132,7 +132,7 @@
   --tap: 44px;
   --control-h: 42px;
   --sidebar-w: 248px;
-  --rail-w: 84px;
+  --rail-w: 92px;
   --tabbar-h: 64px;
   --page-max: 1160px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -322,6 +322,7 @@ a { color: var(--accent-text); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .page-head-text { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .page-eyebrow { font-size: var(--text-sm); color: var(--muted); font-weight: 500; }
+.page-title:focus { outline: none; }
 .page-title { font-size: var(--text-3xl); font-weight: 700; letter-spacing: var(--tracking-tight); line-height: 1.15; }
 .page-sub { margin: 0; color: var(--muted); font-size: var(--text-md); max-width: 60ch; }
 .page-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
@@ -1006,7 +1007,7 @@ a { color: var(--accent-text); }
   .sidebar .brand-name, .nav-label, .sidebar-foot .privacy-note, .sidebar-foot .btn-label { display: none; }
   .nav { gap: var(--space-4); }
   .nav-group + .nav-group { border-top: 1px solid var(--border); padding-top: var(--space-4); }
-  .nav-item { flex-direction: column; justify-content: center; gap: 3px; min-height: 58px; padding: var(--space-1); font-size: 11px; text-align: center; }
+  .nav-item { flex-direction: column; justify-content: center; gap: 3px; min-height: 58px; padding: var(--space-1) 2px; font-size: 11px; letter-spacing: -0.01em; text-align: center; }
   .nav-item .nav-text { max-width: 100%; }
   .nav-item.is-active::before { left: -8px; }
   .sidebar-foot { padding: 0; align-items: center; }

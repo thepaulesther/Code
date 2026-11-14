@@ -44,6 +44,8 @@ export function TransactionForm({
   onAdd,
   onChooseBase,
   editing,
+  initialType,
+  bare,
 }: {
   expenseCategories: string[];
   incomeCategories: string[];
@@ -57,16 +59,22 @@ export function TransactionForm({
   onChooseBase: (currency: string) => void;
   /** Edit this transaction instead of adding a new one (the form starts filled in). */
   editing?: Transaction;
+  /** Start on Expense or Income (e.g. from an "Add income" button). */
+  initialType?: TxType;
+  /** Render without the card and heading, for use inside a dialog. */
+  bare?: boolean;
 }) {
   const linkedRule = editing?.recurringId ? recurring.find((r) => r.id === editing.recurringId) : undefined;
   const [keepOldFor, setKeepOldFor] = useState<string | null>(null); // rule id the user chose to keep
   const { money, currency: base } = useFormat();
-  const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
+  const [type, setType] = useState<TxType>(editing?.type ?? initialType ?? 'expense');
   const [amount, setAmount] = useState(editing ? String(editing.original?.amount ?? editing.amount) : '');
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(editing?.original?.currency ?? null); // null = base
   const currency = chosenCurrency ?? base;
   const [rateText, setRateText] = useState<string | null>(editing?.original ? String(editing.original.rate) : null); // null = market rate
-  const [category, setCategory] = useState(editing?.category ?? 'Groceries');
+  const [category, setCategory] = useState(
+    editing?.category ?? (initialType === 'income' ? (incomeCategories[0] ?? '') : 'Groceries'),
+  );
   const [note, setNote] = useState(editing?.note ?? '');
   const [date, setDate] = useState(editing?.date ?? todayISO());
   const [repeat, setRepeat] = useState<RepeatEvery>(linkedRule ? (intervalOf(linkedRule) === 12 ? 12 : 1) : 0);
@@ -131,8 +139,8 @@ export function TransactionForm({
   const day = Number(date.slice(8, 10));
 
   return (
-    <form className={editing ? 'tx-form' : 'card tx-form'} onSubmit={submit} noValidate>
-      {!editing && (
+    <form className={editing || bare ? 'tx-form' : 'card tx-form'} onSubmit={submit} noValidate>
+      {!editing && !bare && (
         <div className="card-head">
           <h2>Add transaction</h2>
         </div>
