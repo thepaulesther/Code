@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   currencySymbol,
   monthLabel,
@@ -15,6 +15,7 @@ import { conversionRate, parseRate, rateForInput, round2, type RateCache, type R
 import { useFormat } from '../lib/format';
 import { findSimilarRule, intervalOf, ordinal, type RecurringRule } from '../lib/recurring';
 import { CurrencySelect, RateField } from './CurrencyFields';
+import { Icon } from './ui/Icon';
 
 /** 0 = one-off, 1 = every month, 12 = every year. */
 export type RepeatEvery = 0 | 1 | 12;
@@ -44,6 +45,8 @@ export function TransactionForm({
   onAdd,
   onChooseBase,
   editing,
+  initialType,
+  bare,
 }: {
   expenseCategories: string[];
   incomeCategories: string[];
@@ -57,22 +60,39 @@ export function TransactionForm({
   onChooseBase: (currency: string) => void;
   /** Edit this transaction instead of adding a new one (the form starts filled in). */
   editing?: Transaction;
+  /** Start on Expense or Income (e.g. from an "Add income" button). */
+  initialType?: TxType;
+  /** Render without the card and heading, for use inside a dialog. */
+  bare?: boolean;
 }) {
   const linkedRule = editing?.recurringId ? recurring.find((r) => r.id === editing.recurringId) : undefined;
   const [keepOldFor, setKeepOldFor] = useState<string | null>(null); // rule id the user chose to keep
   const { money, currency: base } = useFormat();
-  const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
+  const [type, setType] = useState<TxType>(editing?.type ?? initialType ?? 'expense');
   const [amount, setAmount] = useState(editing ? String(editing.original?.amount ?? editing.amount) : '');
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(editing?.original?.currency ?? null); // null = base
   const currency = chosenCurrency ?? base;
   const [rateText, setRateText] = useState<string | null>(editing?.original ? String(editing.original.rate) : null); // null = market rate
-  const [category, setCategory] = useState(editing?.category ?? 'Groceries');
+  const [category, setCategory] = useState(
+    editing?.category ?? (initialType === 'income' ? (incomeCategories[0] ?? '') : 'Groceries'),
+  );
   const [note, setNote] = useState(editing?.note ?? '');
   const [date, setDate] = useState(editing?.date ?? todayISO());
   const [repeat, setRepeat] = useState<RepeatEvery>(linkedRule ? (intervalOf(linkedRule) === 12 ? 12 : 1) : 0);
   const [spread, setSpread] = useState(editing?.spread ?? 1);
   const [updateFuture, setUpdateFuture] = useState(true);
   const [error, setError] = useState('');
+  // On a short screen the message can sit out of view above the pinned button: bring it into view,
+  // every time submitting fails (even with the same message).
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const [failures, setFailures] = useState(0);
+  const fail = (message: string) => {
+    setError(message);
+    setFailures((n) => n + 1);
+  };
+  useEffect(() => {
+    if (failures) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [failures]);
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
   // Fall back to the first category if the chosen one was renamed or deleted.
@@ -98,11 +118,11 @@ export function TransactionForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!base) return setError('Choose your currency first');
-    if (value == null) return setError('Enter an amount greater than 0, like 42.50');
-    if (foreign && rate == null) return setError(`Enter the exchange rate from ${currency} to ${base}`);
-    if (!date) return setError('Pick a date');
-    if (!current) return setError('Add a category in Settings first');
+    if (!base) return fail('Choose your currency first');
+    if (value == null) return fail('Enter an amount greater than 0, like 42.50');
+    if (foreign && rate == null) return fail(`Enter the exchange rate from ${currency} to ${base}`);
+    if (!date) return fail('Pick a date');
+    if (!current) return fail('Add a category in Settings first');
     const r = rate ?? 1;
     onAdd(
       {
@@ -131,8 +151,8 @@ export function TransactionForm({
   const day = Number(date.slice(8, 10));
 
   return (
-    <form className={editing ? 'tx-form' : 'card tx-form'} onSubmit={submit} noValidate>
-      {!editing && (
+    <form className={editing || bare ? 'tx-form' : 'card tx-form'} onSubmit={submit} noValidate>
+      {!editing && !bare && (
         <div className="card-head">
           <h2>Add transaction</h2>
         </div>
@@ -154,6 +174,7 @@ export function TransactionForm({
             className={type === t ? `is-on ${t}` : ''}
             onClick={() => switchType(t)}
           >
+            <Icon name={t === 'expense' ? 'arrow-out' : 'arrow-in'} size={17} />
             {t === 'expense' ? 'Expense' : 'Income'}
           </button>
         ))}
@@ -175,6 +196,7 @@ export function TransactionForm({
             <span aria-hidden>{currencySymbol(currency)}</span>
             <input
               id="tx-amount"
+              data-autofocus={bare || undefined}
               inputMode="decimal"
               placeholder="0.00"
               value={amount}
@@ -254,6 +276,12 @@ export function TransactionForm({
           </select>
         </label>
       </div>
+      {repeat === 0 && spread === 1 && (
+        <p className="form-note">
+          <strong>Repeats</strong> adds it for you on the same day each month or year.{' '}
+          <strong>Counts toward</strong> spreads one big payment, like yearly rent, across several months.
+        </p>
+      )}
       {(repeat > 0 || spread > 1) && day > 0 && (
         <p className="form-note">
           {spread > 1 && value != null && rate != null && (
@@ -306,7 +334,8 @@ export function TransactionForm({
           This stops “{linkedRule.note || linkedRule.category}” repeating. Payments already recorded stay.
         </p>
       )}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert" ref={errorRef}>{error}</p>}
+      <div className="form-submit">
       <button type="submit" className="btn-primary">
         {editing
           ? 'Save changes'
@@ -316,6 +345,7 @@ export function TransactionForm({
               ? `Add yearly ${type}`
               : `Add ${type}`}
       </button>
+      </div>
       </fieldset>
     </form>
   );

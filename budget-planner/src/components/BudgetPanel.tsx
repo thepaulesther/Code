@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { parseAmount, type BudgetStatus, type Budgets } from '../lib/budget';
 import { useFormat } from '../lib/format';
+import { EmptyState } from './ui/EmptyState';
+import { Icon } from './ui/Icon';
 
-export function BudgetPanel({ status, budgets, categories, onChange }: {
+export function BudgetPanel({ status, budgets, categories, onChange, summary, action, onSetUp }: {
   status: BudgetStatus[];
   budgets: Budgets;
   categories: string[];
   onChange: (b: Budgets) => void;
+  /** Read-only glance (Overview): the four most-used budgets. */
+  summary?: boolean;
+  /** Shown in the header in summary mode, e.g. a "See all" link. */
+  action?: ReactNode;
+  /** Summary mode's empty-state button (go to the Budgets page). */
+  onSetUp?: () => void;
 }) {
   const { money, symbol } = useFormat();
   const [editing, setEditing] = useState(false);
@@ -26,18 +34,26 @@ export function BudgetPanel({ status, budgets, categories, onChange }: {
     onChange(next);
     setEditing(false);
   };
+  const shown = summary ? [...status].sort((a, b) => b.ratio - a.ratio).slice(0, 4) : status;
 
   return (
     <section className="card budgets">
       <div className="card-head">
-        <h2>Monthly budgets</h2>
-        {editing ? (
+        <h2>
+          {summary ? 'Budgets this month' : 'Monthly budgets'}
+          {summary && status.length > 4 && <span className="card-sub">Showing the 4 most used of {status.length}</span>}
+        </h2>
+        {summary ? action : editing ? (
           <div className="head-actions">
             <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
             <button type="button" className="btn-primary sm" onClick={save}>Save</button>
           </div>
         ) : (
-          <button type="button" className="btn-ghost" onClick={startEdit}>Edit</button>
+          status.length > 0 && (
+            <button type="button" className="btn-secondary sm" onClick={startEdit}>
+              <Icon name="edit" size={16} /> Edit limits
+            </button>
+          )
         )}
       </div>
 
@@ -60,15 +76,26 @@ export function BudgetPanel({ status, budgets, categories, onChange }: {
           ))}
         </div>
       ) : status.length === 0 ? (
-        <p className="empty">Set a monthly limit for each category to track how much you've spent against it.</p>
+        <EmptyState
+          icon="budgets"
+          title="No budgets yet"
+          compact={summary}
+          action={
+            <button type="button" className={summary ? 'btn-secondary sm' : 'btn-primary'} onClick={summary ? onSetUp : startEdit}>
+              Set budgets
+            </button>
+          }
+        >
+          Set a monthly limit for each category to see how much you’ve spent against it.
+        </EmptyState>
       ) : (
         <ul className="budget-rows">
-          {status.map((b) => (
+          {shown.map((b) => (
             <li key={b.category} className={`state-${b.state}`}>
               <div className="budget-line">
                 <span className="budget-name">{b.category}</span>
                 <span className="num budget-nums">
-                  {money(b.spent)} <span className="muted">/ {money(b.limit)}</span>
+                  {money(b.spent)} <span className="muted">spent of {money(b.limit)}</span>
                 </span>
               </div>
               <div
@@ -82,7 +109,11 @@ export function BudgetPanel({ status, budgets, categories, onChange }: {
                 <div className="meter-fill" style={{ width: `${Math.min(b.ratio, 1) * 100}%` }} />
               </div>
               <span className="budget-note">
-                {b.state === 'over' ? `${money(-b.remaining)} over` : `${money(b.remaining)} left`}
+                <span className="budget-status">
+                  <Icon name={b.state === 'ok' ? 'check' : 'alert'} size={14} />
+                  {b.state === 'over' ? 'Over limit' : b.state === 'warn' ? 'Close to limit' : 'On track'}
+                </span>
+                <span className="num">{b.state === 'over' ? `${money(-b.remaining)} over` : `${money(b.remaining)} left`}</span>
               </span>
             </li>
           ))}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatMoney, monthLabel, shortDate, todayISO } from '../lib/budget';
 import { useFormat } from '../lib/format';
+import { EmptyState } from './ui/EmptyState';
 import {
   intervalOf,
   nextOccurrence,
@@ -41,7 +42,7 @@ export function RecurringPanel({ rules, rateFor, paymentCount, onToggle, onDelet
   return (
     <section className="card recurring">
       <div className="card-head">
-        <h2>Repeating</h2>
+        <h2>Bills and repeating</h2>
         {rules.length > 0 && (
           <span className="muted num small" title={anyForeign ? 'Foreign-currency items at the latest rate' : undefined}>
             {sum('income') > 0 && <span className="income-text">+{money(sum('income'), { compact: true })}</span>}
@@ -52,10 +53,10 @@ export function RecurringPanel({ rules, rateFor, paymentCount, onToggle, onDelet
         )}
       </div>
       {rules.length === 0 ? (
-        <p className="empty">
+        <EmptyState icon="repeat" title="Nothing repeating yet" compact>
           Set “Repeats” when adding a salary, a subscription or a yearly rent, and it will be added automatically
           on its day.
-        </p>
+        </EmptyState>
       ) : (
         <ul className="rec-rows">
           {sorted.map((r) => {
@@ -69,7 +70,7 @@ export function RecurringPanel({ rules, rateFor, paymentCount, onToggle, onDelet
             const showMonthly = yearly || (r.spreadMonths ?? 1) > 1;
             return (
               <li key={r.id} className={r.paused ? 'is-paused' : ''}>
-                <span className="dot" style={{ background: r.type === 'income' ? 'var(--income)' : color(r.category) }} />
+                <span className="dot" style={{ background: r.type === 'income' ? 'var(--income)' : color(r.category) }} aria-hidden />
                 <div className="row-main">
                   <span className="row-title">
                     {r.note || r.category}

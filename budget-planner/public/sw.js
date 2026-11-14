@@ -1,4 +1,4 @@
-// Ledgerly service worker: makes the app load offline. User data lives in localStorage, not here.
+// Elora service worker: makes the app load offline. User data lives in localStorage, not here.
 const CACHE = 'ledgerly-v1';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 

@@ -1,11 +1,27 @@
-# Ledgerly: budget planner
+# Elora: budget planner
 
-A small, private budget planner. Track income and expenses, set monthly limits per category, and see where your money goes. All data lives in your browser's `localStorage`; nothing is sent to a server. It installs as an app and works offline.
+A calm, private money planner. Track income and expenses, set monthly limits per category, and see where your money goes. All data lives in your browser's `localStorage`; nothing is sent to a server. It installs as an app and works offline.
+
+## Layout
+
+| Page | What's on it |
+| --- | --- |
+| **Overview** | Greeting, this month's balance (income minus spending) with income and spending, quick actions, budget progress, savings goals, the 6-month trend, recent activity and insights |
+| **Transactions** | The month's entries with search and filters, edit and delete, import and export, and repeating items |
+| **Budgets** | Category limits and the spending breakdown |
+| **Savings** | Goals and the emergency fund, with totals and what to set aside each month |
+| **Insights** | Month totals with change vs last month, trend and categories |
+| **Plan** | The monthly plan and the bills that feed it |
+| **Settings** | Theme, base currency, plan and alerts, categories, your data |
+
+On desktop the pages are in a sidebar, on tablets in an icon rail, and on phones in a bottom tab bar (Overview, Transactions, Budgets, Savings, More) with a floating **+** for adding a transaction. Pages have their own address (`#/budgets`), so the back button works. The design system (colours, type, spacing, components) is described in [`docs/redesign/02-design-system.md`](docs/redesign/02-design-system.md), and the plan's figures are explained on the Plan page and in [`docs/redesign/03-review-round.md`](docs/redesign/03-review-round.md).
+
+"Balance" on the Overview is the month's income minus spending. Elora records what you enter; it doesn't connect to bank accounts, so it never shows an account balance.
 
 ## Features
 
 - **Monthly overview**: income, expenses, net, and savings rate, with a change versus last month
-- **6-month trend chart**: click a month to jump to it
+- **6-month trend chart**: click a month (or focus it and press Enter) to jump to it
 - **Spending donut**: by category, with hover to highlight
 - **Category budgets**: progress meters that turn amber at 80% and red when over
 - **Repeating transactions**: set “Repeats” to every month or every year for salary, subscriptions or rent. Each one is added on its day, including any months missed while the app was closed. You can pause, resume or stop them from the Repeating panel.
@@ -28,12 +44,15 @@ A small, private budget planner. Track income and expenses, set monthly limits p
   - signed amounts, `(12.00)` and `1.234,56` formats
   - separate money-in and money-out columns
   - duplicates of what you already have, which it skips
-- **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates
+- **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates. It holds transactions only, not budgets, goals or settings
 - **Multi-currency**: pick a **base currency** from every ISO currency (Naira, Yen, Cedi and so on), which all totals, budgets and charts use. Any transaction can be entered in another currency. For example, a remote worker with a Naira base can record a $5,000 salary: the app suggests today's market rate, you can type the rate you actually got, and ₦ is added to your totals while the original "$5,000 @ 1,480" is kept.
   - Repeating items can be in a foreign currency; each month converts at the latest rate.
   - CSV import has an "Amounts are in" option for foreign-currency account statements.
   - Changing the base currency asks whether to **convert** existing data at a rate, or just **relabel** it.
   - Rates come from [ExchangeRate-API](https://www.exchangerate-api.com), falling back to [fawazahmed0/currency-api](https://github.com/fawazahmed0/exchange-api). They refresh at most every 12 hours. Only the rate list is downloaded, and none of your data is sent. When offline you type the rate yourself.
+- **Setup guide**: new users get a five-step checklist on the Overview (currency, income, spending, budgets, a goal). Every step after the first can be skipped; the guide can be hidden and shown again from Settings.
+- **Filters**: search, Expense/Income and a category filter on Transactions, with a Clear filters button
+- **Insights**: short notes on the Overview built from your own numbers: how much you can spend a day, budgets near or over the limit, your biggest category, the change from last month and your savings rate
 - **Theme**: System, Light or Dark
 - **Installable PWA**: has a manifest, icons, and a service worker that caches the app for offline use
 
@@ -46,7 +65,7 @@ When you add a repeating item that matches an existing one (say, a yearly “Ren
 ```bash
 npm install
 npm run dev              # http://localhost:5173
-npm test                 # unit tests (budget maths, repeating rules, CSV parsing, categories)
+npm test                 # unit tests (budget maths, repeating rules, CSV parsing, categories, routing, insights)
 npm run lint
 npm run build            # type-check + production build into dist/
 npm run build:artifact   # single self-contained HTML file in dist-artifact/
@@ -76,5 +95,11 @@ The site will then be at `https://<owner>.github.io/<repo>/`. The build uses rel
 | `src/lib/alarm.ts` | Alarm sound (Web Audio) and notifications |
 | `src/lib/format.ts` | Currency- and category-aware formatters for components |
 | `src/lib/pwa.ts` | Install prompt, online status, service worker registration |
-| `src/components/` | Charts (SVG), form, lists, budgets, repeating panel, and the Settings, Import and Export dialogs |
+| `src/lib/route.ts` | Hash routing (`#/budgets`) for the pages |
+| `src/lib/insights.ts` | Overview insights, derived from totals, the plan and budget status |
+| `src/components/` | Charts (SVG), form, lists, budgets, goals, plan, repeating panel, Settings page, and the Import and Export dialogs |
+| `src/components/layout/` | App shell: sidebar, mobile top bar, tab bar, More sheet, add button |
+| `src/components/overview/` | Balance hero, quick actions, insights card |
+| `src/components/ui/` | Shared kit: icons and brand mark, page header and month switcher, empty state, error boundary |
+| `src/index.css` | Design tokens (light and dark) and all component styles |
 | `public/` | Manifest, icons, `sw.js` |
