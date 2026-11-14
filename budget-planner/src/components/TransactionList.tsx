@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { shortDate, type Transaction } from '../lib/budget';
+import { formatMoney, shortDate, type Transaction } from '../lib/budget';
+import { formatRate } from '../lib/currency';
 import { useFormat } from '../lib/format';
 
 type Filter = 'all' | 'income' | 'expense';
@@ -59,10 +60,17 @@ export function TransactionList({ transactions, onDelete }: {
                 </span>
                 <span className="row-sub">{t.category} · {shortDate(t.date)}</span>
               </div>
-              <span className={`num row-amt ${t.type}`}>
-                {t.type === 'income' ? '+' : '−'}
-                {money(t.amount)}
-              </span>
+              <div className="row-amts">
+                <span className={`num row-amt ${t.type}`}>
+                  {t.type === 'income' ? '+' : '−'}
+                  {money(t.amount)}
+                </span>
+                {t.original && (
+                  <span className="row-orig num" title={`Converted at 1 ${t.original.currency} = ${formatRate(t.original.rate)}`}>
+                    {formatMoney(t.original.amount, t.original.currency)} @ {formatRate(t.original.rate)}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 className="icon-btn"

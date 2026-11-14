@@ -18,7 +18,7 @@ export function useFormat() {
     () => ({
       currency,
       symbol: currencySymbol(currency),
-      money: (n: number, opts?: { compact?: boolean }) => formatMoney(n, currency, opts),
+      money: (n: number, opts?: { compact?: boolean }) => formatMoney(n, currency, { ...opts, narrow: true }),
       color: (category: string) => categoryColor(category, expenseCategories),
     }),
     [currency, expenseCategories],

@@ -1,16 +1,24 @@
 import { useState, type FormEvent } from 'react';
-import { newId, parseAmount, shortDate, todayISO, type Transaction, type TxType } from '../lib/budget';
+import { currencySymbol, newId, parseAmount, shortDate, todayISO, type Transaction, type TxType } from '../lib/budget';
+import { conversionRate, parseRate, rateForInput, round2, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
 import { ordinal } from '../lib/recurring';
+import { CurrencySelect, RateField } from './CurrencyFields';
 
-export function TransactionForm({ expenseCategories, incomeCategories, onAdd }: {
+export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, onAdd }: {
   expenseCategories: string[];
   incomeCategories: string[];
+  rates?: RateCache;
+  ratesStatus: RatesStatus;
+  onRefreshRates: (() => void) | null;
   onAdd: (t: Transaction, repeatMonthly: boolean) => void;
 }) {
-  const { symbol } = useFormat();
+  const { money, currency: base } = useFormat();
   const [type, setType] = useState<TxType>('expense');
   const [amount, setAmount] = useState('');
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null); // null = base currency
+  const currency = chosenCurrency ?? base;
+  const [rateText, setRateText] = useState<string | null>(null); // null = use the market rate
   const [category, setCategory] = useState('Groceries');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(todayISO());
@@ -21,6 +29,12 @@ export function TransactionForm({ expenseCategories, incomeCategories, onAdd }: 
   // Fall back to the first category if the chosen one was renamed or deleted.
   const current = categories.includes(category) ? category : (categories[0] ?? '');
 
+  const foreign = currency !== base;
+  const suggested = foreign ? conversionRate(rates, currency, base) : 1;
+  const shownRate = rateText ?? (foreign && suggested ? rateForInput(suggested) : '');
+  const rate = foreign ? parseRate(shownRate) : 1;
+  const value = parseAmount(amount);
+
   const switchType = (t: TxType) => {
     setType(t);
     const list = t === 'expense' ? expenseCategories : incomeCategories;
@@ -29,23 +43,27 @@ export function TransactionForm({ expenseCategories, incomeCategories, onAdd }: 
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const value = parseAmount(amount);
-    if (value == null) {
-      setError('Enter an amount greater than 0, like 42.50');
-      return;
-    }
-    if (!date) {
-      setError('Pick a date');
-      return;
-    }
-    if (!current) {
-      setError('Add a category in Settings first');
-      return;
-    }
-    onAdd({ id: newId(), type, amount: value, category: current, note: note.trim(), date }, repeat);
+    if (value == null) return setError('Enter an amount greater than 0, like 42.50');
+    if (foreign && rate == null) return setError(`Enter the exchange rate from ${currency} to ${base}`);
+    if (!date) return setError('Pick a date');
+    if (!current) return setError('Add a category in Settings first');
+    const r = rate ?? 1;
+    onAdd(
+      {
+        id: newId(),
+        type,
+        amount: round2(value * r),
+        category: current,
+        note: note.trim(),
+        date,
+        ...(foreign ? { original: { amount: value, currency, rate: r } } : {}),
+      },
+      repeat,
+    );
     setAmount('');
     setNote('');
     setRepeat(false);
+    setRateText(null); // a rate typed for one payment shouldn't silently apply to the next
     setError('');
   };
 
@@ -70,20 +88,56 @@ export function TransactionForm({ expenseCategories, incomeCategories, onAdd }: 
           </button>
         ))}
       </div>
-      <label className="field">
-        <span>Amount</span>
-        <div className="money-input">
-          <span aria-hidden>{symbol}</span>
-          <input
-            id="tx-amount"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            aria-invalid={!!error}
+      <div className="field">
+        <label htmlFor="tx-amount">Amount</label>
+        <div className="amount-row">
+          <CurrencySelect
+            id="tx-currency"
+            compact
+            label="Currency"
+            value={currency}
+            onChange={(c) => {
+              setChosenCurrency(c === base ? null : c);
+              setRateText(null);
+            }}
           />
+          <div className="money-input">
+            <span aria-hidden>{currencySymbol(currency)}</span>
+            <input
+              id="tx-amount"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              aria-invalid={!!error}
+            />
+          </div>
         </div>
-      </label>
+      </div>
+      {foreign && (
+        <div className="convert-box">
+          <RateField
+            id="tx-rate"
+            from={currency}
+            to={base}
+            value={shownRate}
+            onChange={setRateText}
+            suggested={suggested}
+            rates={rates}
+            status={ratesStatus}
+            onRefresh={onRefreshRates}
+          />
+          <p className="convert-result">
+            {value != null && rate != null ? (
+              <>
+                <span className="muted">Counts as</span> <strong className="num">{money(round2(value * rate))}</strong>
+              </>
+            ) : (
+              <span className="muted">Enter the amount and rate to see it in {base}.</span>
+            )}
+          </p>
+        </div>
+      )}
       <div className="field-row">
         <label className="field">
           <span>Category</span>
@@ -110,6 +164,7 @@ export function TransactionForm({ expenseCategories, incomeCategories, onAdd }: 
             <small>
               On the {ordinal(day)}, starting {shortDate(date)}
               {day > 28 && ' (or the last day of shorter months)'}
+              {foreign && `. Later months convert at the latest ${currency} rate.`}
             </small>
           )}
         </span>

@@ -99,9 +99,15 @@ describe('toCSV', () => {
       tx({ date: '2026-11-01', note: 'Bus', category: 'Transport', amount: 3 }),
     ]);
     expect(csv.split('\n')).toEqual([
-      'date,type,category,amount,note',
-      '2026-11-01,expense,Transport,3.00,Bus',
-      '2026-11-05,expense,Other,12.50,"Lunch, ""fancy"""',
+      'date,type,category,amount,note,original_amount,original_currency,rate',
+      '2026-11-01,expense,Transport,3.00,Bus,,,',
+      '2026-11-05,expense,Other,12.50,"Lunch, ""fancy""",,,',
     ]);
+  });
+  it('includes the original currency and rate for converted amounts', () => {
+    const csv = toCSV([
+      tx({ type: 'income', category: 'Salary', amount: 7601750, note: 'Pay', original: { amount: 5000, currency: 'USD', rate: 1520.35 } }),
+    ]);
+    expect(csv.split('\n')[1]).toBe('2026-11-01,income,Salary,7601750.00,Pay,5000.00,USD,1520.35');
   });
 });

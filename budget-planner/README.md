@@ -17,7 +17,11 @@ A small, private budget planner. Track income and expenses, set monthly limits p
   - separate money-in and money-out columns
   - duplicates of what you already have, which it skips
 - **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates
-- **Currency**: 20 common currencies (display only, no conversion)
+- **Multi-currency**: pick a **base currency** from every ISO currency (Naira, Yen, Cedi and so on), which all totals, budgets and charts use. Any transaction can be entered in another currency. For example, a remote worker with a Naira base can record a $5,000 salary: the app suggests today's market rate, you can type the rate you actually got, and ₦ is added to your totals while the original "$5,000 @ 1,480" is kept.
+  - Repeating items can be in a foreign currency; each month converts at the latest rate.
+  - CSV import has an "Amounts are in" option for foreign-currency account statements.
+  - Changing the base currency asks whether to **convert** existing data at a rate, or just **relabel** it.
+  - Rates come from [ExchangeRate-API](https://www.exchangerate-api.com), falling back to [fawazahmed0/currency-api](https://github.com/fawazahmed0/exchange-api). They refresh at most every 12 hours. Only the rate list is downloaded, and none of your data is sent. When offline you type the rate yourself.
 - **Theme**: System, Light or Dark
 - **Installable PWA**: has a manifest, icons, and a service worker that caches the app for offline use
 
@@ -53,6 +57,7 @@ The site will then be at `https://<owner>.github.io/<repo>/`. The build uses rel
 | `src/lib/recurring.ts` | Repeating rules: due dates, catching up on missed months, pause/resume |
 | `src/lib/csv.ts` | CSV parsing, column/date/amount detection, import with duplicate checks |
 | `src/lib/store.ts` | App data shape, loading, migration and saving, category add/rename/remove, `useAppData` |
+| `src/lib/currency.ts` | Exchange rates: fetching, caching, cross-rate conversion, currency list |
 | `src/lib/format.ts` | Currency- and category-aware formatters for components |
 | `src/lib/pwa.ts` | Install prompt, online status, service worker registration |
 | `src/components/` | Charts (SVG), form, lists, budgets, repeating panel, and the Settings, Import and Export dialogs |

@@ -316,6 +316,46 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .rec-actions .btn-ghost { padding: 2px 8px; font-size: 12px; }
 .rec-rows li.is-paused .row-title, .rec-rows li.is-paused .row-amt { opacity: 0.5; }
 
+/* Currency + conversion */
+.amount-row { display: flex; gap: 6px; min-width: 0; }
+.amount-row .money-input { flex: 1; }
+.amount-row .cur-compact {
+  flex: none; width: 84px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  padding: 0 8px; font-size: 14px; font-weight: 600; color: var(--text);
+}
+.cur-compact:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.set-section select#set-currency, .import-opts select#opt-currency {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 10px; font-size: 14px;
+}
+.import-opts select#opt-currency { padding: 6px 8px; max-width: 240px; }
+.convert-box {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.rate-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 550; flex-wrap: wrap; }
+.rate-row input {
+  width: 120px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 9px; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text);
+}
+.rate-row input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.rate-field .hint { margin-top: 4px; font-size: 12px; }
+.convert-result { margin: 0; font-size: 14px; }
+.convert-result strong { font-size: 16px; }
+.link-btn {
+  border: 0; background: none; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; font-size: inherit;
+}
+.hint a { color: var(--accent); }
+.switch-panel {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-2); font-size: 14px; max-width: 560px;
+}
+.switch-panel p { margin: 0; }
+.switch-panel .head-actions { justify-content: flex-end; }
+.switch-panel .rate-field { padding-left: 26px; }
+.row-amts { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.row-orig { display: block; font-size: 11px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+
 /* Modal */
 .modal {
   border: 0; padding: 0; border-radius: 16px; background: var(--surface); color: var(--text);

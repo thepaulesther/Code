@@ -25,7 +25,8 @@ import {
 } from './lib/budget';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
-import { dueOccurrences, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
+import { conversionRate, useRates } from './lib/currency';
+import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
 import { applyRecurring, useAppData } from './lib/store';
 
 const CURRENT_MONTH = monthOf(todayISO());
@@ -40,6 +41,8 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const install = useInstallPrompt();
   const online = useOnline();
+  const { status: ratesStatus, refresh: refreshRates } = useRates(data.rates, setData, { online, disabled: IS_ARTIFACT });
+  const rateFor = (c: string) => conversionRate(data.rates, c, settings.currency);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -57,7 +60,7 @@ export default function App() {
     () => ({ currency: settings.currency, expenseCategories: settings.expenseCategories }),
     [settings.currency, settings.expenseCategories],
   );
-  const money = (n: number) => formatMoney(n, settings.currency);
+  const money = (n: number) => formatMoney(n, settings.currency, { narrow: true });
 
   const monthTx = useMemo(() => inMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
@@ -73,14 +76,17 @@ export default function App() {
       const rule: RecurringRule = {
         id: newId(),
         type: tx.type,
-        amount: tx.amount,
+        amount: tx.original ? tx.original.amount : tx.amount,
+        ...(tx.original ? { currency: tx.original.currency, rate: tx.original.rate } : {}),
         category: tx.category,
         note: tx.note,
         day: Number(tx.date.slice(8, 10)),
         startMonth: monthOf(tx.date),
       };
       const backfilled = dueOccurrences(rule, today).length;
-      setData((d) => applyRecurring({ ...d, recurring: [...d.recurring, rule] }, today));
+      // Months added now use the rate just entered; later months use the latest rate.
+      const { created, rules } = materialize([rule], today, () => rule.rate ?? null);
+      setData((d) => ({ ...d, recurring: [...d.recurring, ...rules], transactions: [...d.transactions, ...created] }));
       setToast(
         backfilled === 0
           ? `Scheduled. The first one will be added on ${shortDate(tx.date)}.`
@@ -211,10 +217,15 @@ export default function App() {
             <TransactionForm
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
+              rates={data.rates}
+              ratesStatus={ratesStatus}
+              onRefreshRates={refreshRates}
               onAdd={add}
             />
-            <RecurringPanel rules={recurring} onToggle={toggleRule} onDelete={deleteRule} />
-            <p className="fineprint">Your data stays in this browser. Nothing is sent anywhere.</p>
+            <RecurringPanel rules={recurring} rateFor={rateFor} onToggle={toggleRule} onDelete={deleteRule} />
+            <p className="fineprint">
+              Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}
+            </p>
           </aside>
         </main>
 
@@ -224,8 +235,17 @@ export default function App() {
           data={data}
           setData={setData}
           showInstallHelp={!IS_ARTIFACT}
+          ratesStatus={ratesStatus}
+          onRefreshRates={refreshRates}
         />
-        <ImportDialog open={dialog === 'import'} onClose={() => setDialog(null)} data={data} onImport={importTxs} />
+        <ImportDialog
+          open={dialog === 'import'}
+          onClose={() => setDialog(null)}
+          data={data}
+          onImport={importTxs}
+          ratesStatus={ratesStatus}
+          onRefreshRates={refreshRates}
+        />
         <ExportDialog
           open={dialog === 'export'}
           onClose={() => setDialog(null)}

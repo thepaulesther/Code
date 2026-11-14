@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateForMonth, dueOccurrences, materialize, nextOccurrence, ordinal, resumeRule, type RecurringRule } from './recurring';
+import { dateForMonth, dueOccurrences, materialize, nextOccurrence, ordinal, resumeRule, ruleBaseAmount, type RecurringRule } from './recurring';
 
 const rule = (p: Partial<RecurringRule> = {}): RecurringRule => ({
   id: 'r1',
@@ -53,6 +53,25 @@ describe('materialize', () => {
     const second = materialize(first.rules, '2026-11-14');
     expect(second.created).toEqual([]);
     expect(second.rules).toBe(first.rules);
+  });
+});
+
+describe('foreign-currency rules', () => {
+  const salary = rule({ id: 's', type: 'income', amount: 5000, currency: 'USD', rate: 1400, category: 'Salary', note: 'Pay', day: 1, startMonth: '2026-11' });
+
+  it('converts each occurrence at the live rate and remembers it', () => {
+    const { created, rules } = materialize([salary], '2026-11-14', (c) => (c === 'USD' ? 1520.35 : null));
+    expect(created[0]).toMatchObject({ amount: 7601750, original: { amount: 5000, currency: 'USD', rate: 1520.35 } });
+    expect(rules[0].rate).toBe(1520.35);
+  });
+  it('falls back to the rule’s last rate when offline', () => {
+    const { created } = materialize([salary], '2026-11-14', () => null);
+    expect(created[0]).toMatchObject({ amount: 7000000, original: { rate: 1400 } });
+  });
+  it('ruleBaseAmount gives the monthly amount in base currency', () => {
+    expect(ruleBaseAmount(salary)).toBe(7000000);
+    expect(ruleBaseAmount(salary, () => 1500)).toBe(7500000);
+    expect(ruleBaseAmount(rule())).toBe(1450);
   });
 });
 

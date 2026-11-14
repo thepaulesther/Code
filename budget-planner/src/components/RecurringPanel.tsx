@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { shortDate, todayISO } from '../lib/budget';
+import { formatMoney, shortDate, todayISO } from '../lib/budget';
 import { useFormat } from '../lib/format';
-import { nextOccurrence, ordinal, type RecurringRule } from '../lib/recurring';
+import { nextOccurrence, ordinal, ruleBaseAmount, type RecurringRule } from '../lib/recurring';
 
-export function RecurringPanel({ rules, onToggle, onDelete }: {
+export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
   rules: RecurringRule[];
+  /** Latest rate from a currency to the base currency, or null if unknown. */
+  rateFor: (currency: string) => number | null;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -13,17 +15,18 @@ export function RecurringPanel({ rules, onToggle, onDelete }: {
   const today = todayISO();
 
   const active = rules.filter((r) => !r.paused);
-  const monthlyIn = active.filter((r) => r.type === 'income').reduce((s, r) => s + r.amount, 0);
-  const monthlyOut = active.filter((r) => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
+  const sum = (type: 'income' | 'expense') =>
+    active.filter((r) => r.type === type).reduce((s, r) => s + ruleBaseAmount(r, rateFor), 0);
   const sorted = [...rules].sort((a, b) => Number(!!a.paused) - Number(!!b.paused) || a.day - b.day);
+  const anyForeign = active.some((r) => r.currency);
 
   return (
     <section className="card recurring">
       <div className="card-head">
         <h2>Repeating</h2>
         {rules.length > 0 && (
-          <span className="muted num small">
-            <span className="income-text">+{money(monthlyIn)}</span> · −{money(monthlyOut)} / mo
+          <span className="muted num small" title={anyForeign ? 'Foreign-currency items at the latest rate' : undefined}>
+            <span className="income-text">+{money(sum('income'), { compact: true })}</span> · −{money(sum('expense'), { compact: true })} / mo
           </span>
         )}
       </div>
@@ -36,6 +39,7 @@ export function RecurringPanel({ rules, onToggle, onDelete }: {
         <ul className="rec-rows">
           {sorted.map((r) => {
             const next = nextOccurrence(r, today);
+            const sign = r.type === 'income' ? '+' : '−';
             return (
               <li key={r.id} className={r.paused ? 'is-paused' : ''}>
                 <span className="dot" style={{ background: r.type === 'income' ? 'var(--income)' : color(r.category) }} />
@@ -45,10 +49,13 @@ export function RecurringPanel({ rules, onToggle, onDelete }: {
                     {r.paused ? 'Paused' : `Monthly on the ${ordinal(r.day)}${next ? ` · next ${shortDate(next)}` : ''}`}
                   </span>
                 </div>
-                <span className={`num row-amt ${r.type}`}>
-                  {r.type === 'income' ? '+' : '−'}
-                  {money(r.amount)}
-                </span>
+                <div className="row-amts">
+                  <span className={`num row-amt ${r.type}`}>
+                    {sign}
+                    {r.currency ? formatMoney(r.amount, r.currency) : money(r.amount)}
+                  </span>
+                  {r.currency && <span className="row-orig num">≈ {money(ruleBaseAmount(r, rateFor))}</span>}
+                </div>
                 <div className="rec-actions">
                   {confirming === r.id ? (
                     <>

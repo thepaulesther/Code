@@ -1,10 +1,15 @@
-import { monthOf, shiftMonth, type Transaction, type TxType } from './budget';
+import { monthOf, round2, shiftMonth, type Transaction, type TxType } from './budget';
 
 /** A transaction that repeats every month on `day` (clamped to short months). */
 export interface RecurringRule {
   id: string;
   type: TxType;
+  /** In `currency` when set, otherwise in the base currency. */
   amount: number;
+  /** Paid in another currency, e.g. a USD salary with an NGN base. Converted on each occurrence. */
+  currency?: string;
+  /** Last rate used (base units per 1 `currency`); the fallback when no live rate is available. */
+  rate?: number;
   category: string;
   note: string;
   day: number; // 1..31
@@ -50,13 +55,22 @@ export function nextOccurrence(rule: RecurringRule, today: string): string | nul
   return dateForMonth(m, rule.day);
 }
 
+/** A rule's monthly amount in the base currency, using `rateFor` or the rule's last rate. */
+export function ruleBaseAmount(rule: RecurringRule, rateFor?: (currency: string) => number | null): number {
+  if (!rule.currency) return rule.amount;
+  const rate = rateFor?.(rule.currency) ?? rule.rate ?? 1;
+  return round2(rule.amount * rate);
+}
+
 /**
  * Turn every due occurrence into a transaction. Transaction ids are derived from
  * the rule and month, so running this twice never creates duplicates.
+ * Foreign-currency rules convert at `rateFor(currency)` (latest known rate), else the rule's last rate.
  */
 export function materialize(
   rules: RecurringRule[],
   today: string,
+  rateFor?: (currency: string) => number | null,
 ): { created: Transaction[]; rules: RecurringRule[] } {
   const created: Transaction[] = [];
   let changed = false;
@@ -64,18 +78,20 @@ export function materialize(
     const dates = dueOccurrences(r, today);
     if (!dates.length) return r;
     changed = true;
+    const rate = r.currency ? (rateFor?.(r.currency) ?? r.rate ?? 1) : undefined;
     for (const date of dates) {
       created.push({
         id: `${r.id}:${monthOf(date)}`,
         type: r.type,
-        amount: r.amount,
+        amount: ruleBaseAmount(r, () => rate ?? null),
         category: r.category,
         note: r.note,
         date,
         recurringId: r.id,
+        ...(r.currency && rate ? { original: { amount: r.amount, currency: r.currency, rate } } : {}),
       });
     }
-    return { ...r, lastGenerated: monthOf(dates[dates.length - 1]) };
+    return { ...r, lastGenerated: monthOf(dates[dates.length - 1]), ...(rate ? { rate } : {}) };
   });
   return { created, rules: changed ? next : rules };
 }

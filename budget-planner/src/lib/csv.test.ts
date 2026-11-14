@@ -78,8 +78,8 @@ describe('guessMapping', () => {
     expect(guessMapping(['Date', 'Payee', 'Money Out', 'Money In'])).toMatchObject({ date: 0, note: 1, debit: 2, credit: 3, amount: -1 });
   });
   it('maps our own export', () => {
-    expect(guessMapping(['date', 'type', 'category', 'amount', 'note'])).toEqual({
-      date: 0, type: 1, category: 2, amount: 3, note: 4, debit: -1, credit: -1,
+    expect(guessMapping(['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate'])).toEqual({
+      date: 0, type: 1, category: 2, amount: 3, note: 4, debit: -1, credit: -1, origAmount: 5, origCurrency: 6, rate: 7,
     });
   });
   it('treats a Debit/Credit column as the type when there is an amount', () => {
@@ -107,6 +107,7 @@ describe('buildImport', () => {
     expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
     incomeCategories: DEFAULT_INCOME_CATEGORIES,
     existing: [],
+    base: 'USD',
   };
 
   it('uses the sign of a single amount column', () => {
@@ -159,5 +160,40 @@ describe('buildImport', () => {
     // Importing the same file again finds only duplicates.
     const again = buildImport(rows, { ...base, map: guessMapping(header), existing: txs });
     expect(again.every((r) => r.status === 'duplicate')).toBe(true);
+  });
+
+  it('converts a statement in another currency into the base currency', () => {
+    const map = guessMapping(['Date', 'Description', 'Amount']);
+    const out = buildImport([['2026-11-01', 'Client payment', '5000'], ['2026-11-02', 'Laptop', '-1,200.50']], {
+      ...base,
+      map,
+      base: 'NGN',
+      fileCurrency: 'USD',
+      rate: 1520.35,
+    });
+    expect(out.map((r) => [r.tx?.type, r.tx?.amount, r.tx?.original])).toEqual([
+      ['income', 7601750, { amount: 5000, currency: 'USD', rate: 1520.35 }],
+      ['expense', 1825180.18, { amount: 1200.5, currency: 'USD', rate: 1520.35 }],
+    ]);
+  });
+
+  it('marks rows unreadable when a foreign file has no rate', () => {
+    const map = guessMapping(['Date', 'Description', 'Amount']);
+    const out = buildImport([['2026-11-01', 'Pay', '50']], { ...base, map, base: 'NGN', fileCurrency: 'USD' });
+    expect(out[0]).toMatchObject({ status: 'invalid', reason: 'No exchange rate' });
+  });
+
+  it('round-trips converted transactions, and spots duplicates by their original amount', () => {
+    const txs: Transaction[] = [
+      { id: '1', type: 'income', amount: 7601750, category: 'Salary', note: 'Pay', date: '2026-11-01', original: { amount: 5000, currency: 'USD', rate: 1520.35 } },
+    ];
+    const [header, ...rows] = parseCSV(toCSV(txs));
+    const out = buildImport(rows, { ...base, base: 'NGN', map: guessMapping(header) });
+    expect(out[0].tx).toMatchObject({ amount: 7601750, original: { amount: 5000, currency: 'USD', rate: 1520.35 } });
+    // Same payment imported from a USD statement at a different rate is still a duplicate.
+    const again = buildImport([['2026-11-01', 'Pay', '5000']], {
+      ...base, base: 'NGN', fileCurrency: 'USD', rate: 1490, existing: txs, map: guessMapping(['Date', 'Description', 'Amount']),
+    });
+    expect(again[0].status).toBe('duplicate');
   });
 });

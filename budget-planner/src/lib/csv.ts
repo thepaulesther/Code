@@ -1,4 +1,4 @@
-import { newId, type Transaction, type TxType } from './budget';
+import { newId, round2, type Transaction, type TxType } from './budget';
 import { daysInMonth } from './recurring';
 
 /** Parse CSV text (comma, semicolon or tab separated; quoted fields; CRLF; BOM). Drops blank rows. */
@@ -106,9 +106,15 @@ export interface ColumnMap {
   note: number;
   category: number;
   type: number;
+  /** Ledgerly's own export: what a converted amount was originally, and the rate used. */
+  origAmount: number;
+  origCurrency: number;
+  rate: number;
 }
 
-export const EMPTY_MAP: ColumnMap = { date: -1, amount: -1, debit: -1, credit: -1, note: -1, category: -1, type: -1 };
+export const EMPTY_MAP: ColumnMap = {
+  date: -1, amount: -1, debit: -1, credit: -1, note: -1, category: -1, type: -1, origAmount: -1, origCurrency: -1, rate: -1,
+};
 
 /** Guess columns from a header row. `date === -1` means it doesn't look like a header. */
 export function guessMapping(header: string[]): ColumnMap {
@@ -120,6 +126,10 @@ export function guessMapping(header: string[]): ColumnMap {
     return i;
   };
   const map = { ...EMPTY_MAP };
+  // Specific columns first, so "original_amount" isn't taken as the amount.
+  map.origAmount = find(/^original[ _]amount$/);
+  map.origCurrency = find(/^original[ _]currency$/);
+  map.rate = find(/^(exchange[ _])?rate$/);
   map.date = find(/date/);
   map.type = find(/^type$|transaction type|^kind$|debit\s*\/\s*credit|credit\s*\/\s*debit|^dr\/cr$|^cr\/dr$/);
   map.category = find(/categor/);
@@ -170,6 +180,12 @@ export interface ImportOptions {
   expenseCategories: string[];
   incomeCategories: string[];
   existing: Transaction[];
+  /** The app's base currency. */
+  base: string;
+  /** Currency the file's amounts are in (e.g. a USD account statement). Defaults to `base`. */
+  fileCurrency?: string;
+  /** Base units per 1 `fileCurrency`; required when it differs from `base`. */
+  rate?: number;
 }
 
 export interface ImportRow {
@@ -179,8 +195,9 @@ export interface ImportRow {
   reason?: string;
 }
 
-const dupKey = (t: Pick<Transaction, 'date' | 'type' | 'amount' | 'note'>) =>
-  `${t.date}|${t.type}|${t.amount.toFixed(2)}|${t.note.trim().toLowerCase()}`;
+/** Converted amounts compare by their original currency amount, so a re-import at a new rate still matches. */
+const dupKey = (t: Pick<Transaction, 'date' | 'type' | 'amount' | 'note' | 'original'>) =>
+  `${t.date}|${t.type}|${t.original ? t.original.currency + t.original.amount.toFixed(2) : t.amount.toFixed(2)}|${t.note.trim().toLowerCase()}`;
 
 export function buildImport(rows: string[][], o: ImportOptions): ImportRow[] {
   const seen = new Set(o.existing.map(dupKey));
@@ -214,7 +231,31 @@ export function buildImport(rows: string[][], o: ImportOptions): ImportRow[] {
     const rawCat = cell(map.category).toLowerCase();
     const category = list.find((c) => c.toLowerCase() === rawCat) ?? fallbackCategory(list, type);
 
-    const tx: Transaction = { id: newId(), type, amount: Math.abs(signed), category, note: cell(map.note).slice(0, 80), date };
+    let amount = Math.abs(signed);
+    let original: Transaction['original'];
+    const rowCurrency = cell(map.origCurrency).toUpperCase();
+    const rowOriginal = parseSignedAmount(cell(map.origAmount));
+    const rowRate = Number(cell(map.rate).replace(/,/g, ''));
+    const fileCurrency = (o.fileCurrency ?? o.base).toUpperCase();
+    if (/^[A-Z]{3}$/.test(rowCurrency) && rowCurrency !== o.base && rowOriginal && rowRate > 0) {
+      // Our own export: the amount column is already in base; keep what it was originally.
+      original = { amount: Math.abs(rowOriginal), currency: rowCurrency, rate: rowRate };
+    } else if (fileCurrency !== o.base) {
+      const rate = o.rate ?? 0;
+      if (!(rate > 0)) return { line, status: 'invalid', reason: 'No exchange rate' };
+      original = { amount, currency: fileCurrency, rate };
+      amount = round2(amount * rate);
+    }
+
+    const tx: Transaction = {
+      id: newId(),
+      type,
+      amount,
+      category,
+      note: cell(map.note).slice(0, 80),
+      date,
+      ...(original ? { original } : {}),
+    };
     return { line, tx, status: seen.has(dupKey(tx)) ? 'duplicate' : 'new' };
   });
 }

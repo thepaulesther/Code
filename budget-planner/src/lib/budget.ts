@@ -5,11 +5,20 @@ export type TxType = 'income' | 'expense';
 export interface Transaction {
   id: string;
   type: TxType;
-  amount: number; // always positive; sign comes from `type`
+  amount: number; // in the base currency; always positive, sign comes from `type`
   category: string;
   note: string;
   date: string; // YYYY-MM-DD
   recurringId?: string; // set when created by a repeating rule
+  /** Set when entered in another currency: `amount` = round(original.amount * original.rate). */
+  original?: Money;
+}
+
+/** An amount in a non-base currency and the rate used: `rate` base units per 1 unit of `currency`. */
+export interface Money {
+  amount: number;
+  currency: string;
+  rate: number;
 }
 
 /** Monthly spending limit per expense category, e.g. { Groceries: 400 } */
@@ -41,6 +50,9 @@ export function categoryColor(category: string, expenseCategories: readonly stri
   const i = expenseCategories.indexOf(category);
   return i === -1 ? 'var(--cat-0)' : `var(--cat-${(i % PALETTE_SIZE) + 1})`;
 }
+
+/** Round to cents, correcting float noise (1200.5 * 1520.35 = …0.17499999 should be …0.18). */
+export const round2 = (n: number) => Math.round(Number((n * 100).toPrecision(15))) / 100;
 
 /** "2026-11-14" -> "2026-11" */
 export const monthOf = (date: string): string => date.slice(0, 7);
@@ -148,25 +160,47 @@ const csvCell = (v: string | number) => {
 };
 
 export function toCSV(txs: Transaction[]): string {
-  const header = ['date', 'type', 'category', 'amount', 'note'];
+  const header = ['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate'];
   const rows = [...txs]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((t) => [t.date, t.type, t.category, t.amount.toFixed(2), t.note].map(csvCell).join(','));
+    .map((t) =>
+      [
+        t.date,
+        t.type,
+        t.category,
+        t.amount.toFixed(2),
+        t.note,
+        t.original ? t.original.amount.toFixed(2) : '',
+        t.original?.currency ?? '',
+        t.original ? String(t.original.rate) : '',
+      ]
+        .map(csvCell)
+        .join(','),
+    );
   return [header.join(','), ...rows].join('\n');
 }
 
 const fmtCache = new Map<string, Intl.NumberFormat>();
 
-export function formatMoney(n: number, currency = 'USD', opts: { compact?: boolean } = {}): string {
-  const key = `${currency}|${opts.compact ? 'c' : 's'}`;
+/**
+ * Format an amount. `narrow` (used for the base currency) prefers the local sign, e.g. ₦ rather than "NGN";
+ * without it, foreign amounts keep the standard symbol so "$" isn't confused with another dollar.
+ */
+export function formatMoney(
+  n: number,
+  currency = 'USD',
+  opts: { compact?: boolean; narrow?: boolean } = {},
+): string {
+  const key = `${currency}|${opts.compact ? 'c' : 's'}|${opts.narrow ? 'n' : ''}`;
   let f = fmtCache.get(key);
   if (!f) {
+    const display = opts.narrow ? ({ currencyDisplay: 'narrowSymbol' } as const) : {};
     try {
       f = new Intl.NumberFormat(
         undefined,
         opts.compact
-          ? { style: 'currency', currency, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
-          : { style: 'currency', currency },
+          ? { style: 'currency', currency, ...display, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+          : { style: 'currency', currency, ...display },
       );
     } catch {
       f = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });

@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react';
-import { shortDate, type Transaction, type TxType } from '../lib/budget';
+import { formatMoney, shortDate, type Transaction, type TxType } from '../lib/budget';
 import {
   buildImport,
   detectDateFormat,
@@ -11,32 +11,46 @@ import {
   type ColumnMap,
   type DateFormat,
 } from '../lib/csv';
+import { conversionRate, parseRate, rateForInput, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
 import type { AppData } from '../lib/store';
+import { CurrencySelect, RateField } from './CurrencyFields';
 import { Modal } from './Modal';
 
 const MAX_BYTES = 5_000_000;
 const PREVIEW_ROWS = 100;
 
-export function ImportDialog({ open, onClose, data, onImport }: {
+export function ImportDialog({ open, onClose, data, onImport, ratesStatus, onRefreshRates }: {
   open: boolean;
   onClose: () => void;
   data: AppData;
   onImport: (txs: Transaction[]) => void;
+  ratesStatus: RatesStatus;
+  onRefreshRates: (() => void) | null;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Import from CSV" wide>
-      <ImportBody data={data} onImport={onImport} onCancel={onClose} />
+      <ImportBody data={data} onImport={onImport} onCancel={onClose} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
     </Modal>
   );
 }
 
-function ImportBody({ data, onImport, onCancel }: {
+function ImportBody({ data, onImport, onCancel, ratesStatus, onRefreshRates }: {
   data: AppData;
   onImport: (txs: Transaction[]) => void;
   onCancel: () => void;
+  ratesStatus: RatesStatus;
+  onRefreshRates: (() => void) | null;
 }) {
   const { money } = useFormat();
+  const base = data.settings.currency;
+  const [chosenCurrency, setChosenCurrency] = useState<string | null>(null); // null = base
+  const [rateText, setRateText] = useState<string | null>(null);
+  const fileCurrency = chosenCurrency ?? base;
+  const foreign = fileCurrency !== base;
+  const suggested = foreign ? conversionRate(data.rates, fileCurrency, base) : 1;
+  const shownRate = rateText ?? (foreign && suggested ? rateForInput(suggested) : '');
+  const rate = foreign ? parseRate(shownRate) : 1;
   const [source, setSource] = useState<{ name: string; rows: string[][] } | null>(null);
   const [paste, setPaste] = useState('');
   const [error, setError] = useState('');
@@ -97,8 +111,11 @@ function ImportBody({ data, onImport, onCancel }: {
         expenseCategories: data.settings.expenseCategories,
         incomeCategories: data.settings.incomeCategories,
         existing: data.transactions,
+        base,
+        fileCurrency,
+        rate: rate ?? undefined,
       }),
-    [body, map, dateFormat, positiveIs, data.settings.expenseCategories, data.settings.incomeCategories, data.transactions],
+    [body, map, dateFormat, positiveIs, data.settings.expenseCategories, data.settings.incomeCategories, data.transactions, base, fileCurrency, rate],
   );
 
   const toImport = result.filter((r) => r.status === 'new');
@@ -199,6 +216,17 @@ function ImportBody({ data, onImport, onCancel }: {
             <option value="dmy">Day/Month/Year (14/11/2026)</option>
           </select>
         </label>
+        <label className="field inline" htmlFor="opt-currency">
+          <span>Amounts are in</span>
+          <CurrencySelect
+            id="opt-currency"
+            value={fileCurrency}
+            onChange={(c) => {
+              setChosenCurrency(c === base ? null : c);
+              setRateText(null);
+            }}
+          />
+        </label>
         {!splitMode && map.type === -1 && (
           <label className="field inline">
             <span>Positive amounts are</span>
@@ -209,6 +237,23 @@ function ImportBody({ data, onImport, onCancel }: {
           </label>
         )}
       </div>
+
+      {foreign && (
+        <div className="convert-box">
+          <RateField
+            id="import-rate"
+            from={fileCurrency}
+            to={base}
+            value={shownRate}
+            onChange={setRateText}
+            suggested={suggested}
+            rates={data.rates}
+            status={ratesStatus}
+            onRefresh={onRefreshRates}
+          />
+          <p className="hint">Every row is converted at this rate. Each transaction keeps its {fileCurrency} amount.</p>
+        </div>
+      )}
 
       <p className="import-summary" aria-live="polite">
         <span className="pill ok">{toImport.length} to import</span>
@@ -229,7 +274,10 @@ function ImportBody({ data, onImport, onCancel }: {
                     <td className="nowrap">{shortDate(r.tx.date)}</td>
                     <td className="desc">{r.tx.note || <span className="muted">—</span>}</td>
                     <td className="nowrap">{r.tx.category}</td>
-                    <td className={`r num nowrap ${r.tx.type}`}>{r.tx.type === 'income' ? '+' : '−'}{money(r.tx.amount)}</td>
+                    <td className={`r num nowrap ${r.tx.type}`}>
+                      {r.tx.type === 'income' ? '+' : '−'}{money(r.tx.amount)}
+                      {r.tx.original && <span className="row-orig">{formatMoney(r.tx.original.amount, r.tx.original.currency)}</span>}
+                    </td>
                   </>
                 ) : (
                   <td colSpan={4} className="muted">Row {r.line}: {(body[r.line - 1] ?? []).join(', ').slice(0, 80)}</td>

@@ -9,6 +9,7 @@ import {
   type Transaction,
   type TxType,
 } from './budget';
+import { conversionRate, round2, type RateCache } from './currency';
 import { materialize, type RecurringRule } from './recurring';
 import { readJSON, writeJSON } from './storage';
 
@@ -27,6 +28,7 @@ export interface AppData {
   budgets: Budgets;
   recurring: RecurringRule[];
   settings: Settings;
+  rates?: RateCache;
 }
 
 const KEY = 'bp.data';
@@ -74,7 +76,9 @@ export function loadData(today: string): AppData {
 
 /** Add any repeating transactions that have come due. Returns the same object when nothing changed. */
 export function applyRecurring(data: AppData, today: string): AppData {
-  const { created, rules } = materialize(data.recurring, today);
+  const { created, rules } = materialize(data.recurring, today, (c) =>
+    conversionRate(data.rates, c, data.settings.currency),
+  );
   if (rules === data.recurring) return data;
   const ids = new Set(data.transactions.map((t) => t.id));
   return { ...data, recurring: rules, transactions: [...data.transactions, ...created.filter((t) => !ids.has(t.id))] };
@@ -82,6 +86,51 @@ export function applyRecurring(data: AppData, today: string): AppData {
 
 export function emptyData(settings: Settings): AppData {
   return { version: 2, transactions: [], budgets: {}, recurring: [], settings };
+}
+
+/* ---------- Base currency ---------- */
+
+/**
+ * Switch the base currency.
+ * - 'convert': every base amount is multiplied by `rate` (new units per 1 old unit) and keeps a note of
+ *   what it was originally, so a $1,450 rent becomes ₦2.2M "from $1,450". Repeating items keep being paid
+ *   in their original currency and convert each month.
+ * - 'relabel': the numbers stay the same; only the currency they're shown in changes (for data that was
+ *   really in the new currency all along).
+ * Either way, anything originally in the new currency goes back to its exact original amount.
+ */
+export function changeBaseCurrency(d: AppData, newBase: string, mode: 'convert' | 'relabel', rate = 1): AppData {
+  const oldBase = d.settings.currency;
+  if (newBase === oldBase) return d;
+  const convert = mode === 'convert';
+
+  const transactions = d.transactions.map((t): Transaction => {
+    if (t.original?.currency === newBase) {
+      const { original, ...rest } = t;
+      return { ...rest, amount: original.amount };
+    }
+    if (!convert) return t;
+    if (t.original) return { ...t, amount: round2(t.amount * rate), original: { ...t.original, rate: t.original.rate * rate } };
+    return { ...t, amount: round2(t.amount * rate), original: { amount: t.amount, currency: oldBase, rate } };
+  });
+
+  const recurring = d.recurring.map((r): RecurringRule => {
+    if (r.currency === newBase) {
+      const rest = { ...r };
+      delete rest.currency;
+      delete rest.rate;
+      return rest;
+    }
+    if (!convert) return r;
+    if (r.currency) return { ...r, rate: (r.rate ?? 1) * rate };
+    return { ...r, currency: oldBase, rate };
+  });
+
+  const budgets = convert
+    ? Object.fromEntries(Object.entries(d.budgets).map(([c, v]) => [c, round2(v * rate)]))
+    : d.budgets;
+
+  return { ...d, transactions, recurring, budgets, settings: { ...d.settings, currency: newBase } };
 }
 
 /* ---------- Categories ---------- */
