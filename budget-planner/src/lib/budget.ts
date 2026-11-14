@@ -5,11 +5,42 @@ export type TxType = 'income' | 'expense';
 export interface Transaction {
   id: string;
   type: TxType;
-  amount: number; // always positive; sign comes from `type`
+  amount: number; // in the base currency; always positive, sign comes from `type`
   category: string;
   note: string;
   date: string; // YYYY-MM-DD
   recurringId?: string; // set when created by a repeating rule
+  /** Set when entered in another currency: `amount` = round(original.amount * original.rate). */
+  original?: Money;
+  /**
+   * Count this payment across this many months (2+), starting the month it was paid.
+   * E.g. ₦3,000,000 yearly rent with spread 12 counts as ₦250,000 a month.
+   */
+  spread?: number;
+  /** Part of the example data shown on first visit; "Remove examples" deletes these. */
+  sample?: boolean;
+}
+
+/** One-off example transactions: category, note and day of month (for recognising older saved examples). */
+export const SAMPLE_ONE_OFFS: [string, string, number][] = [
+  ['Groceries', 'Weekly shops', 6],
+  ['Dining', 'Eating out', 9],
+  ['Transport', 'Transit pass', 3],
+  ['Utilities', 'Power & internet', 12],
+  ['Entertainment', 'Streaming & cinema', 14],
+  ['Freelance', 'Side project', 10],
+];
+
+/** A transaction as it counts in one month: spread payments appear as their monthly share. */
+export interface Entry extends Transaction {
+  share?: { index: number; of: number; total: number };
+}
+
+/** An amount in a non-base currency and the rate used: `rate` base units per 1 unit of `currency`. */
+export interface Money {
+  amount: number;
+  currency: string;
+  rate: number;
 }
 
 /** Monthly spending limit per expense category, e.g. { Groceries: 400 } */
@@ -42,6 +73,9 @@ export function categoryColor(category: string, expenseCategories: readonly stri
   return i === -1 ? 'var(--cat-0)' : `var(--cat-${(i % PALETTE_SIZE) + 1})`;
 }
 
+/** Round to cents, correcting float noise (1200.5 * 1520.35 = …0.17499999 should be …0.18). */
+export const round2 = (n: number) => Math.round(Number((n * 100).toPrecision(15))) / 100;
+
 /** "2026-11-14" -> "2026-11" */
 export const monthOf = (date: string): string => date.slice(0, 7);
 
@@ -66,6 +100,40 @@ export const shortDate = (date: string) =>
 
 export const inMonth = (txs: Transaction[], month: string) =>
   txs.filter((t) => monthOf(t.date) === month);
+
+/** Whole months from `from` to `to` ("2026-11" -> "2027-02" = 3). */
+export function monthDiff(from: string, to: string): number {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/** The k-th (0-based) of n equal shares; the last one absorbs rounding so the shares add up exactly. */
+export function shareAmount(total: number, n: number, k: number): number {
+  const each = round2(total / n);
+  return k === n - 1 ? round2(total - each * (n - 1)) : each;
+}
+
+export const isSpread = (t: Pick<Transaction, 'spread'>) => !!t.spread && t.spread > 1;
+
+/**
+ * What counts in `month`: ordinary transactions dated that month, plus this month's share of any
+ * payment spread over several months (like yearly rent). Use this for totals, budgets and charts.
+ */
+export function effectiveInMonth(txs: Transaction[], month: string): Entry[] {
+  const out: Entry[] = [];
+  for (const t of txs) {
+    if (!isSpread(t)) {
+      if (monthOf(t.date) === month) out.push(t);
+      continue;
+    }
+    const n = t.spread!;
+    const k = monthDiff(monthOf(t.date), month);
+    if (k < 0 || k >= n) continue;
+    out.push({ ...t, amount: shareAmount(t.amount, n, k), share: { index: k + 1, of: n, total: t.amount } });
+  }
+  return out;
+}
 
 export interface Totals {
   income: number;
@@ -101,7 +169,7 @@ export function spendingByCategory(txs: Transaction[]): { category: string; amou
 export function monthlyTrend(txs: Transaction[], endMonth: string, count = 6) {
   return Array.from({ length: count }, (_, i) => {
     const month = shiftMonth(endMonth, i - (count - 1));
-    const { income, expense } = totals(inMonth(txs, month));
+    const { income, expense } = totals(effectiveInMonth(txs, month));
     return { month, income, expense };
   });
 }
@@ -148,28 +216,64 @@ const csvCell = (v: string | number) => {
 };
 
 export function toCSV(txs: Transaction[]): string {
-  const header = ['date', 'type', 'category', 'amount', 'note'];
+  const header = ['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate', 'spread_months'];
   const rows = [...txs]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((t) => [t.date, t.type, t.category, t.amount.toFixed(2), t.note].map(csvCell).join(','));
+    .map((t) =>
+      [
+        t.date,
+        t.type,
+        t.category,
+        t.amount.toFixed(2),
+        t.note,
+        t.original ? t.original.amount.toFixed(2) : '',
+        t.original?.currency ?? '',
+        t.original ? String(t.original.rate) : '',
+        isSpread(t) ? String(t.spread) : '',
+      ]
+        .map(csvCell)
+        .join(','),
+    );
   return [header.join(','), ...rows].join('\n');
 }
 
 const fmtCache = new Map<string, Intl.NumberFormat>();
 
-export function formatMoney(n: number, currency = 'USD', opts: { compact?: boolean } = {}): string {
-  const key = `${currency}|${opts.compact ? 'c' : 's'}`;
+/** A plain number with no currency, used before the user has chosen one: 1,234.50 / 1.2K. */
+function plainFormat(compact?: boolean): Intl.NumberFormat {
+  return new Intl.NumberFormat(
+    undefined,
+    compact
+      ? { notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  );
+}
+
+/**
+ * Format an amount. `narrow` (used for the base currency) prefers the local sign, e.g. ₦ rather than "NGN";
+ * without it, foreign amounts keep the standard symbol so "$" isn't confused with another dollar.
+ * An empty `currency` (none chosen yet) formats a plain number.
+ */
+export function formatMoney(
+  n: number,
+  currency = '',
+  opts: { compact?: boolean; narrow?: boolean } = {},
+): string {
+  const key = `${currency}|${opts.compact ? 'c' : 's'}|${opts.narrow ? 'n' : ''}`;
   let f = fmtCache.get(key);
   if (!f) {
+    const display = opts.narrow ? ({ currencyDisplay: 'narrowSymbol' } as const) : {};
     try {
-      f = new Intl.NumberFormat(
-        undefined,
-        opts.compact
-          ? { style: 'currency', currency, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
-          : { style: 'currency', currency },
-      );
+      f = !currency
+        ? plainFormat(opts.compact)
+        : new Intl.NumberFormat(
+            undefined,
+            opts.compact
+              ? { style: 'currency', currency, ...display, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
+              : { style: 'currency', currency, ...display },
+          );
     } catch {
-      f = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+      f = plainFormat(opts.compact); // unknown code: show the number rather than a wrong symbol
     }
     fmtCache.set(key, f);
   }
@@ -177,6 +281,7 @@ export function formatMoney(n: number, currency = 'USD', opts: { compact?: boole
 }
 
 export function currencySymbol(currency: string): string {
+  if (!currency) return '';
   try {
     return (
       new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' })
@@ -189,6 +294,7 @@ export function currencySymbol(currency: string): string {
 }
 
 export function currencyName(currency: string): string {
+  if (!currency) return 'No currency';
   try {
     return new Intl.DisplayNames(undefined, { type: 'currency' }).of(currency) ?? currency;
   } catch {
@@ -214,8 +320,8 @@ export function sampleData(month: string): {
 } {
   const d = (m: string, day: number) => `${m}-${String(day).padStart(2, '0')}`;
   const recurring: RecurringRule[] = [
-    { id: 'sample-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', day: 1, startMonth: shiftMonth(month, -3), lastGenerated: month },
-    { id: 'sample-rent', type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', day: 2, startMonth: shiftMonth(month, -3), lastGenerated: month },
+    { id: 'sample-salary', type: 'income', amount: 4200, category: 'Salary', note: 'Paycheck', day: 1, startMonth: shiftMonth(month, -3), lastGenerated: month, sample: true },
+    { id: 'sample-rent', type: 'expense', amount: 1450, category: 'Housing', note: 'Rent', day: 2, startMonth: shiftMonth(month, -3), lastGenerated: month, sample: true },
   ];
   const transactions: Transaction[] = [];
   for (let i = 0; i < 4; i++) {
@@ -234,6 +340,7 @@ export function sampleData(month: string): {
     if (i % 2 === 0)
       transactions.push({ id: newId(), type: 'income', amount: 650, category: 'Freelance', note: 'Side project', date: d(m, 10) });
   }
+  for (const t of transactions) t.sample = true;
   return {
     transactions,
     budgets: { Groceries: 380, Dining: 150, Transport: 120, Entertainment: 100, Shopping: 200 },

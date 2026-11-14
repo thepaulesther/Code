@@ -7,7 +7,7 @@ export interface Prefs {
 }
 
 export const PrefsContext = createContext<Prefs>({
-  currency: 'USD',
+  currency: '',
   expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
 });
 
@@ -18,7 +18,7 @@ export function useFormat() {
     () => ({
       currency,
       symbol: currencySymbol(currency),
-      money: (n: number, opts?: { compact?: boolean }) => formatMoney(n, currency, opts),
+      money: (n: number, opts?: { compact?: boolean }) => formatMoney(n, currency, { ...opts, narrow: true }),
       color: (category: string) => categoryColor(category, expenseCategories),
     }),
     [currency, expenseCategories],

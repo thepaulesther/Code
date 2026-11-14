@@ -1,32 +1,153 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { CURRENCIES, currencyName, formatMoney, type TxType } from '../lib/budget';
+import { currencyName, formatMoney, shortDate, type TxType } from '../lib/budget';
+import { conversionRate, parseRate, rateForInput, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
 import {
   addCategory,
   categoryNameError,
+  changeBaseCurrency,
   deleteCategory,
   emptyData,
   renameCategory,
   type AppData,
   type Theme,
 } from '../lib/store';
+import { CurrencySelect, RateField } from './CurrencyFields';
 import { Modal } from './Modal';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
 
-export function SettingsDialog({ open, onClose, data, setData, showInstallHelp }: {
+function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
+  data: AppData;
+  setData: SetData;
+  rates?: RateCache;
+  ratesStatus: RatesStatus;
+  onRefreshRates: (() => void) | null;
+}) {
+  const base = data.settings.currency;
+  const [pending, setPending] = useState<string | null>(null);
+  const [mode, setMode] = useState<'convert' | 'relabel'>('convert');
+  const [rateText, setRateText] = useState<string | null>(null);
+
+  const counts = {
+    transactions: data.transactions.length,
+    budgets: Object.keys(data.budgets).length,
+    repeating: data.recurring.length,
+  };
+  const hasData = counts.transactions + counts.budgets + counts.repeating > 0;
+  const suggested = pending ? conversionRate(rates, base, pending) : null;
+  const shownRate = rateText ?? (suggested ? rateForInput(suggested) : '');
+  const rate = parseRate(shownRate);
+
+  const choose = (c: string) => {
+    setRateText(null);
+    if (c === base) return setPending(null);
+    // Nothing to convert (no data yet, or no currency before): just set it.
+    if (!hasData || !base) {
+      setData((d) => changeBaseCurrency(d, c, 'relabel'));
+      return setPending(null);
+    }
+    setPending(c);
+  };
+
+  const apply = () => {
+    if (!pending || (mode === 'convert' && !rate)) return;
+    const target = pending;
+    setData((d) => changeBaseCurrency(d, target, mode, rate ?? 1));
+    setPending(null);
+  };
+
+  const list = [
+    counts.transactions && `${counts.transactions} transactions`,
+    counts.budgets && `${counts.budgets} budgets`,
+    counts.repeating && `${counts.repeating} repeating items`,
+  ].filter(Boolean).join(', ');
+
+  return (
+    <section className="set-section">
+      <h3>Base currency</h3>
+      <label className="field">
+        <CurrencySelect id="set-currency" value={pending ?? base} onChange={choose} label="Base currency" />
+      </label>
+      {pending ?? base ? (
+        <p className="hint">
+          Totals, budgets and charts are in this currency ({formatMoney(1234.5, pending ?? base, { narrow: true })}). You can still enter
+          amounts in any currency, such as a salary paid in dollars; they’re converted to {currencyName(pending ?? base)} when added.
+        </p>
+      ) : (
+        <p className="hint">No currency chosen yet. Pick the one your totals should be in before adding transactions.</p>
+      )}
+
+      {pending && (
+        <div className="switch-panel" role="group" aria-label={`Switch to ${pending}`}>
+          <p>
+            Your {list} are in <strong>{base}</strong>. What should happen to them?
+          </p>
+          <label className="check">
+            <input type="radio" name="switch-mode" checked={mode === 'convert'} onChange={() => setMode('convert')} />
+            <span>
+              Convert them to {pending}
+              <small>Amounts are multiplied by the rate below. Each one remembers its {base} value. Repeating items stay in {base} and convert every month.</small>
+            </span>
+          </label>
+          {mode === 'convert' && (
+            <RateField
+              id="switch-rate"
+              from={base}
+              to={pending}
+              value={shownRate}
+              onChange={setRateText}
+              suggested={suggested}
+              rates={rates}
+              status={ratesStatus}
+              onRefresh={onRefreshRates}
+            />
+          )}
+          <label className="check">
+            <input type="radio" name="switch-mode" checked={mode === 'relabel'} onChange={() => setMode('relabel')} />
+            <span>
+              Keep the numbers, just show them in {pending}
+              <small>Choose this if you’ve actually been entering amounts in {pending}.</small>
+            </span>
+          </label>
+          <div className="head-actions">
+            <button type="button" className="btn-ghost" onClick={() => setPending(null)}>Cancel</button>
+            <button type="button" className="btn-primary sm" disabled={mode === 'convert' && !rate} onClick={apply}>
+              Switch to {pending}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="hint">
+        {ratesStatus === 'unavailable'
+          ? 'Live exchange rates aren’t available in this view; you’ll be asked for a rate when you need one.'
+          : rates
+            ? <>Exchange rates from {rates.source === 'ExchangeRate-API' ? <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">ExchangeRate-API</a> : rates.source}, updated {shortDate(rates.date)}. </>
+            : ratesStatus === 'loading'
+              ? 'Getting exchange rates… '
+              : 'No exchange rates downloaded yet. '}
+        {onRefreshRates && ratesStatus !== 'loading' && (
+          <button type="button" className="link-btn" onClick={onRefreshRates}>Refresh rates</button>
+        )}
+      </p>
+    </section>
+  );
+}
+
+export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
   open: boolean;
   onClose: () => void;
   data: AppData;
   setData: SetData;
   showInstallHelp: boolean;
+  ratesStatus: RatesStatus;
+  onRefreshRates: (() => void) | null;
 }) {
-  const { settings } = data;
+  const { settings, rates } = data;
   const [confirmReset, setConfirmReset] = useState(false);
   const setSettings = (patch: Partial<AppData['settings']>) =>
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
-
-  const currencies = CURRENCIES.includes(settings.currency) ? CURRENCIES : [settings.currency, ...CURRENCIES];
 
   return (
     <Modal open={open} onClose={onClose} title="Settings" wide>
@@ -49,19 +170,7 @@ export function SettingsDialog({ open, onClose, data, setData, showInstallHelp }
           </div>
         </section>
 
-        <section className="set-section">
-          <h3>Currency</h3>
-          <label className="field">
-            <select id="set-currency" value={settings.currency} onChange={(e) => setSettings({ currency: e.target.value })}>
-              {currencies.map((c) => (
-                <option key={c} value={c}>{c} · {currencyName(c)}</option>
-              ))}
-            </select>
-          </label>
-          <p className="hint">
-            Example: {formatMoney(1234.5, settings.currency)}. This changes how amounts are shown; it doesn’t convert them.
-          </p>
-        </section>
+        <BaseCurrency data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
 
         <div className="set-cols">
           <CategoryEditor type="expense" title="Expense categories" data={data} setData={setData} />

@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
-  monthOf,
-  sampleData,
+  SAMPLE_ONE_OFFS,
   todayISO,
   type Budgets,
   type Transaction,
   type TxType,
 } from './budget';
+import { conversionRate, round2, type RateCache } from './currency';
 import { materialize, type RecurringRule } from './recurring';
 import { readJSON, writeJSON } from './storage';
 
@@ -27,12 +27,13 @@ export interface AppData {
   budgets: Budgets;
   recurring: RecurringRule[];
   settings: Settings;
+  rates?: RateCache;
 }
 
 const KEY = 'bp.data';
 
 export const defaultSettings = (): Settings => ({
-  currency: 'USD',
+  currency: '', // none until the user chooses one
   theme: 'system',
   expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
   incomeCategories: [...DEFAULT_INCOME_CATEGORIES],
@@ -58,23 +59,79 @@ export function isAppData(v: unknown): v is AppData {
   );
 }
 
-export function loadData(today: string): AppData {
+/**
+ * Data saved before examples were flagged: mark the example rent/salary (ids start with "sample-") and
+ * the example one-offs (matching note and day) so "Remove examples" can find them. The user's own
+ * entries are never matched: anything created by one of their repeating items is skipped.
+ */
+export function markLegacySamples(d: AppData): AppData {
+  const hasLegacy = d.recurring.some((r) => r.id.startsWith('sample-') && !r.sample);
+  if (!hasLegacy) return d;
+  const oneOff = new Set(SAMPLE_ONE_OFFS.map(([, note, day]) => `${note}|${day}`));
+  const isSample = (t: Transaction) =>
+    t.id.startsWith('sample-') ||
+    (!t.recurringId && !t.spread && oneOff.has(`${t.note}|${Number(t.date.slice(8, 10))}`));
+  return {
+    ...d,
+    recurring: d.recurring.map((r) => (r.id.startsWith('sample-') ? { ...r, sample: true } : r)),
+    transactions: d.transactions.map((t) => (isSample(t) ? { ...t, sample: true } : t)),
+  };
+}
+
+export const hasSamples = (d: AppData) => d.transactions.some((t) => t.sample) || d.recurring.some((r) => r.sample);
+
+/** Delete the example transactions and repeating items. The user's own entries and budgets stay. */
+export function removeSamples(d: AppData): { data: AppData; transactions: number; repeating: number } {
+  const transactions = d.transactions.filter((t) => !t.sample);
+  const recurring = d.recurring.filter((r) => !r.sample);
+  return {
+    data: { ...d, transactions, recurring },
+    transactions: d.transactions.length - transactions.length,
+    repeating: d.recurring.length - recurring.length,
+  };
+}
+
+/** Stop a repeating item. Its past payments stay unless `deletePayments` is set. */
+export function stopRule(d: AppData, id: string, deletePayments: boolean): AppData {
+  return {
+    ...d,
+    recurring: d.recurring.filter((r) => r.id !== id),
+    transactions: deletePayments
+      ? d.transactions.filter((t) => t.recurringId !== id)
+      : d.transactions.map((t) => {
+          if (t.recurringId !== id) return t;
+          const rest = { ...t };
+          delete rest.recurringId;
+          return rest;
+        }),
+  };
+}
+
+export function loadData(): AppData {
   const saved = readJSON(KEY);
-  if (isAppData(saved)) return { ...saved, settings: { ...defaultSettings(), ...saved.settings } };
+  if (isAppData(saved)) return markLegacySamples({ ...saved, settings: { ...defaultSettings(), ...saved.settings } });
 
   // Migrate from the first version, which stored two separate keys.
   const oldTx = readJSON('bp.transactions');
   if (isTxArray(oldTx)) {
     const oldBudgets = readJSON('bp.budgets');
-    return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings: defaultSettings() };
+    // That version only worked in US dollars.
+    const settings = { ...defaultSettings(), currency: 'USD' };
+    return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings };
   }
 
-  return { version: 2, ...sampleData(monthOf(today)), settings: defaultSettings() };
+  // First visit: start empty so every number on screen comes from the user's own entries.
+  return emptyData(defaultSettings());
 }
+
+export const isEmpty = (d: AppData) =>
+  d.transactions.length === 0 && d.recurring.length === 0 && Object.keys(d.budgets).length === 0;
 
 /** Add any repeating transactions that have come due. Returns the same object when nothing changed. */
 export function applyRecurring(data: AppData, today: string): AppData {
-  const { created, rules } = materialize(data.recurring, today);
+  const { created, rules } = materialize(data.recurring, today, (c) =>
+    conversionRate(data.rates, c, data.settings.currency),
+  );
   if (rules === data.recurring) return data;
   const ids = new Set(data.transactions.map((t) => t.id));
   return { ...data, recurring: rules, transactions: [...data.transactions, ...created.filter((t) => !ids.has(t.id))] };
@@ -82,6 +139,52 @@ export function applyRecurring(data: AppData, today: string): AppData {
 
 export function emptyData(settings: Settings): AppData {
   return { version: 2, transactions: [], budgets: {}, recurring: [], settings };
+}
+
+/* ---------- Base currency ---------- */
+
+/**
+ * Switch the base currency.
+ * - 'convert': every base amount is multiplied by `rate` (new units per 1 old unit) and keeps a note of
+ *   what it was originally, so a $1,450 rent becomes ₦2.2M "from $1,450". Repeating items keep being paid
+ *   in their original currency and convert each month.
+ * - 'relabel': the numbers stay the same; only the currency they're shown in changes (for data that was
+ *   really in the new currency all along).
+ * Either way, anything originally in the new currency goes back to its exact original amount.
+ */
+export function changeBaseCurrency(d: AppData, newBase: string, mode: 'convert' | 'relabel', rate = 1): AppData {
+  const oldBase = d.settings.currency;
+  if (newBase === oldBase) return d;
+  // Without a previous currency there's nothing to convert from: the numbers simply get a currency.
+  const convert = mode === 'convert' && !!oldBase;
+
+  const transactions = d.transactions.map((t): Transaction => {
+    if (t.original?.currency === newBase) {
+      const { original, ...rest } = t;
+      return { ...rest, amount: original.amount };
+    }
+    if (!convert) return t;
+    if (t.original) return { ...t, amount: round2(t.amount * rate), original: { ...t.original, rate: t.original.rate * rate } };
+    return { ...t, amount: round2(t.amount * rate), original: { amount: t.amount, currency: oldBase, rate } };
+  });
+
+  const recurring = d.recurring.map((r): RecurringRule => {
+    if (r.currency === newBase) {
+      const rest = { ...r };
+      delete rest.currency;
+      delete rest.rate;
+      return rest;
+    }
+    if (!convert) return r;
+    if (r.currency) return { ...r, rate: (r.rate ?? 1) * rate };
+    return { ...r, currency: oldBase, rate };
+  });
+
+  const budgets = convert
+    ? Object.fromEntries(Object.entries(d.budgets).map(([c, v]) => [c, round2(v * rate)]))
+    : d.budgets;
+
+  return { ...d, transactions, recurring, budgets, settings: { ...d.settings, currency: newBase } };
 }
 
 /* ---------- Categories ---------- */
@@ -131,7 +234,7 @@ export function deleteCategory(d: AppData, type: TxType, name: string): AppData 
 /* ---------- Hook ---------- */
 
 export function useAppData() {
-  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(todayISO()), todayISO()));
+  const [data, setData] = useState<AppData>(() => applyRecurring(loadData(), todayISO()));
 
   useEffect(() => writeJSON(KEY, data), [data]);
 

@@ -89,6 +89,13 @@ export function TrendChart({ data, selected, onSelect }: {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  if (data.every((d) => d.income === 0 && d.expense === 0)) {
+    return (
+      <div ref={ref}>
+        <p className="empty">Your income and spending for these six months will appear here once you add some.</p>
+      </div>
+    );
+  }
   const H = W < 480 ? 180 : 220;
   const PAD = { top: 12, right: 8, bottom: 26, left: 48 };
   const max = Math.max(1, ...data.flatMap((d) => [d.income, d.expense]));

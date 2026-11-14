@@ -5,16 +5,17 @@ import { ExportDialog } from './components/ExportDialog';
 import { ImportDialog } from './components/ImportDialog';
 import { RecurringPanel } from './components/RecurringPanel';
 import { SettingsDialog } from './components/SettingsDialog';
-import { TransactionForm } from './components/TransactionForm';
+import { TransactionForm, type RepeatEvery } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
   budgetStatus,
+  effectiveInMonth,
   formatMoney,
-  inMonth,
   monthLabel,
   monthOf,
   monthlyTrend,
   newId,
+  shareAmount,
   shiftMonth,
   shortDate,
   spendingByCategory,
@@ -25,8 +26,10 @@ import {
 } from './lib/budget';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
-import { dueOccurrences, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
-import { applyRecurring, useAppData } from './lib/store';
+import { conversionRate, useRates } from './lib/currency';
+import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
+import { applyRecurring, changeBaseCurrency, hasSamples, isEmpty, removeSamples, stopRule, useAppData } from './lib/store';
+import { CurrencySelect } from './components/CurrencyFields';
 
 const CURRENT_MONTH = monthOf(todayISO());
 
@@ -37,9 +40,12 @@ export default function App() {
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
+  const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
   const install = useInstallPrompt();
   const online = useOnline();
+  const { status: ratesStatus, refresh: refreshRates } = useRates(data.rates, setData, { online, disabled: IS_ARTIFACT });
+  const rateFor = (c: string) => conversionRate(data.rates, c, settings.currency);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -49,7 +55,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4500);
+    const t = setTimeout(() => setToastState(null), toast.undo ? 8000 : 4500);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -57,39 +63,60 @@ export default function App() {
     () => ({ currency: settings.currency, expenseCategories: settings.expenseCategories }),
     [settings.currency, settings.expenseCategories],
   );
-  const money = (n: number) => formatMoney(n, settings.currency);
+  const money = (n: number) => formatMoney(n, settings.currency, { narrow: true });
 
-  const monthTx = useMemo(() => inMonth(transactions, month), [transactions, month]);
+  // What counts this month: its own transactions plus this month's share of spread payments (yearly rent).
+  const monthTx = useMemo(() => effectiveInMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
-  const prev = useMemo(() => totals(inMonth(transactions, shiftMonth(month, -1))), [transactions, month]);
+  const prev = useMemo(() => totals(effectiveInMonth(transactions, shiftMonth(month, -1))), [transactions, month]);
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
   const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
 
-  const add = (tx: Transaction, repeatMonthly: boolean) => {
-    if (repeatMonthly) {
+  const add = (tx: Transaction, repeatEvery: RepeatEvery, replaceRuleId?: string) => {
+    const replaced = replaceRuleId ? data.recurring.find((r) => r.id === replaceRuleId) : undefined;
+    const replacedNote = replaced ? ` Stopped the old “${replaced.note || replaced.category}”.` : '';
+    const spreadNote = tx.spread
+      ? ` It counts as ${money(shareAmount(tx.amount, tx.spread, 0))} a month for ${tx.spread} months.`
+      : '';
+    if (repeatEvery) {
       const today = todayISO();
       const rule: RecurringRule = {
         id: newId(),
         type: tx.type,
-        amount: tx.amount,
+        amount: tx.original ? tx.original.amount : tx.amount,
+        ...(tx.original ? { currency: tx.original.currency, rate: tx.original.rate } : {}),
+        ...(repeatEvery === 12 ? { everyMonths: 12 } : {}),
+        ...(tx.spread ? { spreadMonths: tx.spread } : {}),
         category: tx.category,
         note: tx.note,
         day: Number(tx.date.slice(8, 10)),
         startMonth: monthOf(tx.date),
       };
       const backfilled = dueOccurrences(rule, today).length;
-      setData((d) => applyRecurring({ ...d, recurring: [...d.recurring, rule] }, today));
+      // Payments added now use the rate just entered; later ones use the latest rate.
+      const { created, rules } = materialize([rule], today, () => rule.rate ?? null);
+      const before = data;
+      setData((d) => {
+        const base = replaceRuleId ? stopRule(d, replaceRuleId, false) : d;
+        return { ...base, recurring: [...base.recurring, ...rules], transactions: [...base.transactions, ...created] };
+      });
+      const when = repeatEvery === 12 ? `every year on ${shortDate(tx.date)}` : `on the ${ordinal(rule.day)} of every month`;
+      const unit = repeatEvery === 12 ? 'years' : 'months';
       setToast(
-        backfilled === 0
+        (backfilled === 0
           ? `Scheduled. The first one will be added on ${shortDate(tx.date)}.`
           : backfilled === 1
-            ? `Added. It will repeat on the ${ordinal(rule.day)} of every month.`
-            : `Added ${backfilled} months, starting ${shortDate(tx.date)}. It will keep repeating on the ${ordinal(rule.day)}.`,
+            ? `Added. It will repeat ${when}.`
+            : `Added ${backfilled} ${unit}, starting ${shortDate(tx.date)}. It will keep repeating ${when}.`) +
+          spreadNote +
+          replacedNote,
+        replaced ? () => setData(before) : undefined,
       );
     } else {
       setData((d) => ({ ...d, transactions: [...d.transactions, tx] }));
+      if (spreadNote) setToast(`Added.${spreadNote}`);
     }
     setMonth(monthOf(tx.date));
   };
@@ -106,12 +133,24 @@ export default function App() {
     );
   };
 
-  const deleteRule = (id: string) =>
-    setData((d) => ({
-      ...d,
-      recurring: d.recurring.filter((r) => r.id !== id),
-      transactions: d.transactions.map((tx) => (tx.recurringId === id ? { ...tx, recurringId: undefined } : tx)),
-    }));
+  const deleteRule = (id: string, deletePayments: boolean) => {
+    const before = data;
+    const rule = data.recurring.find((r) => r.id === id);
+    const count = data.transactions.filter((x) => x.recurringId === id).length;
+    setData((d) => stopRule(d, id, deletePayments));
+    const name = `“${rule?.note || rule?.category || 'item'}”`;
+    setToast(
+      deletePayments ? `Stopped ${name} and deleted ${count} ${count === 1 ? 'payment' : 'payments'}.` : `Stopped ${name}. Its past payments stay.`,
+      () => setData(before),
+    );
+  };
+
+  const removeExamples = () => {
+    const before = data;
+    const { data: clean, transactions: n, repeating: r } = removeSamples(data);
+    setData(clean);
+    setToast(`Removed ${n} example transactions and ${r} repeating examples.`, () => setData(before));
+  };
 
   const importTxs = (txs: Transaction[]) => {
     setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
@@ -149,11 +188,51 @@ export default function App() {
           </div>
           <div className="top-actions">
             {install && <button type="button" className="btn-ghost accent" onClick={install}>Install app</button>}
-            <button type="button" className="btn-ghost" onClick={() => setDialog('import')}>Import</button>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setDialog('import')}
+              disabled={!settings.currency}
+              title={settings.currency ? undefined : 'Choose your currency first'}
+            >
+              Import
+            </button>
             <button type="button" className="btn-ghost" onClick={() => setDialog('export')} disabled={!transactions.length}>Export</button>
             <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
           </div>
         </header>
+
+        {isEmpty(data) && (
+          <section className="welcome" aria-labelledby="welcome-title">
+            <h2 id="welcome-title">Your budget is empty. Let’s set it up.</h2>
+            <ol>
+              <li>
+                <span>Choose the currency your totals should be in:</span>
+                <CurrencySelect
+                  id="welcome-currency"
+                  label="Base currency"
+                  value={settings.currency}
+                  onChange={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
+                />
+              </li>
+              <li>Add your income and expenses with the <strong>Add transaction</strong> form. Amounts in other currencies are converted.</li>
+              <li>
+                For bills paid once a year, such as rent, set <strong>Repeats: Every year</strong>. The cost then counts
+                as one twelfth in each month.
+              </li>
+            </ol>
+          </section>
+        )}
+
+        {hasSamples(data) && (
+          <div className="sample-banner" role="note">
+            <p>
+              <strong>You’re looking at example data.</strong> Items marked <span className="badge example">example</span>{' '}
+              (including a monthly rent and salary) are counted in your totals. Remove them once you’ve added your own.
+            </p>
+            <button type="button" className="btn-primary sm" onClick={removeExamples}>Remove examples</button>
+          </div>
+        )}
 
         <section className="stats">
           <div className="stat">
@@ -211,10 +290,23 @@ export default function App() {
             <TransactionForm
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
+              rates={data.rates}
+              ratesStatus={ratesStatus}
+              onRefreshRates={refreshRates}
+              recurring={recurring}
               onAdd={add}
+              onChooseBase={(c) => setData((d) => changeBaseCurrency(d, c, 'relabel'))}
             />
-            <RecurringPanel rules={recurring} onToggle={toggleRule} onDelete={deleteRule} />
-            <p className="fineprint">Your data stays in this browser. Nothing is sent anywhere.</p>
+            <RecurringPanel
+              rules={recurring}
+              rateFor={rateFor}
+              paymentCount={(id) => transactions.filter((x) => x.recurringId === id).length}
+              onToggle={toggleRule}
+              onDelete={deleteRule}
+            />
+            <p className="fineprint">
+              Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}
+            </p>
           </aside>
         </main>
 
@@ -224,8 +316,17 @@ export default function App() {
           data={data}
           setData={setData}
           showInstallHelp={!IS_ARTIFACT}
+          ratesStatus={ratesStatus}
+          onRefreshRates={refreshRates}
         />
-        <ImportDialog open={dialog === 'import'} onClose={() => setDialog(null)} data={data} onImport={importTxs} />
+        <ImportDialog
+          open={dialog === 'import'}
+          onClose={() => setDialog(null)}
+          data={data}
+          onImport={importTxs}
+          ratesStatus={ratesStatus}
+          onRefreshRates={refreshRates}
+        />
         <ExportDialog
           open={dialog === 'export'}
           onClose={() => setDialog(null)}
@@ -236,8 +337,20 @@ export default function App() {
 
         {toast && (
           <div className="toast" role="status">
-            {toast}
-            <button type="button" className="icon-btn" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
+            {toast.text}
+            {toast.undo && (
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  toast.undo?.();
+                  setToastState(null);
+                }}
+              >
+                Undo
+              </button>
+            )}
+            <button type="button" className="icon-btn" onClick={() => setToastState(null)} aria-label="Dismiss">×</button>
           </div>
         )}
       </div>
