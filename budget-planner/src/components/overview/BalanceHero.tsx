@@ -13,21 +13,24 @@ const change = (now: number, before: number) => {
  * The Overview's primary element: this month's balance (income minus spending). Elora records cash
  * flow rather than bank balances, so the label says exactly what the number is.
  */
-export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, hasData }: {
+export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, hasData, planHref }: {
   month: string;
   isCurrentMonth: boolean;
   totals: Totals;
   previous: Totals;
   plan: Plan;
   hasData: boolean;
+  /** Link to the Plan page, for the "left to spend" figure. */
+  planHref: string;
 }) {
   const { money } = useFormat();
   const label = isCurrentMonth ? 'Balance this month' : `Balance for ${monthLabel(month)}`;
-  const sub = !hasData
+  const when = isCurrentMonth ? 'this month' : `in ${monthLabel(month)}`;
+  const status = !hasData
     ? 'Add your first income or expense to see your balance here.'
     : t.net >= 0
-      ? `Left over from ${money(t.income)} of income${isCurrentMonth ? ' so far' : ''}.`
-      : `You’ve spent ${money(-t.net)} more than came in.`;
+      ? `You’ve kept ${money(t.net)} of the ${money(t.income)} recorded ${when}.`
+      : `You’ve recorded ${money(-t.net)} more spending than income ${when}.`;
   const showPlan = isCurrentMonth && plan.income > 0 && plan.shortfall <= 0;
 
   return (
@@ -36,25 +39,29 @@ export function BalanceHero({ month, isCurrentMonth, totals: t, previous, plan, 
         <div>
           <span className="hero-label" id="hero-label">{label}</span>
           <strong className="hero-value num">{money(t.net)}</strong>
-          <p className="hero-sub">{sub}</p>
+          <p className="hero-sub">{status}</p>
+          <p className="hero-note">
+            Your recorded income minus your recorded spending {when}. It isn’t your bank balance.
+          </p>
         </div>
-        {hasData && (
-          <div className="hero-chips">
+        {hasData && (t.income > 0 || showPlan) && (
+          <dl className="hero-facts">
             {t.income > 0 && (
-              <span className="hero-chip">
-                Savings rate <strong className="num">{Math.round(t.savingsRate * 100)}%</strong>
-              </span>
+              <div>
+                <dt>Savings rate</dt>
+                <dd className="num">{Math.round(t.savingsRate * 100)}%</dd>
+              </div>
             )}
             {showPlan && (
-              <span className="hero-chip">
-                {plan.leftToSpend >= 0 ? (
-                  <><strong className="num">{money(plan.leftToSpend)}</strong> free to spend</>
-                ) : (
-                  <><strong className="num">{money(-plan.leftToSpend)}</strong> over your plan</>
-                )}
-              </span>
+              <div>
+                <dt>{plan.leftToSpend >= 0 ? 'Left to spend this month' : 'Over your plan this month'}</dt>
+                <dd className="num">
+                  {money(Math.abs(plan.leftToSpend))}
+                  <a className="hero-link" href={planHref}>See plan<Icon name="chevron-right" size={14} /></a>
+                </dd>
+              </div>
             )}
-          </div>
+          </dl>
         )}
       </div>
       <div className="hero-split">

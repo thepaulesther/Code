@@ -47,7 +47,7 @@ import {
 } from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
-import { PlanCard } from './components/PlanCard';
+import { PlanCard, PlanGlossary } from './components/PlanCard';
 import { playAlarm, sendNotification } from './lib/alarm';
 import {
   ALERT_RANK,
@@ -639,7 +639,10 @@ export default function App() {
                     hasGoals={goals.length > 0}
                   />
                 </div>
-                <div className="span-5">{recurringPanel}</div>
+                <div className="span-5 stack">
+                  {recurringPanel}
+                  <PlanGlossary />
+                </div>
               </div>
             )}
           </>
@@ -684,6 +687,7 @@ export default function App() {
               previous={prev}
               plan={plan}
               hasData={monthTx.length > 0}
+              planHref={hrefFor('plans')}
             />
             <QuickActions
               onExpense={() => setAdding('expense')}

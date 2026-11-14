@@ -485,6 +485,15 @@ a { color: var(--accent-text); }
   margin-top: var(--space-2); overflow-wrap: anywhere;
 }
 .hero-sub { margin: var(--space-2) 0 0; color: var(--hero-muted); font-size: var(--text-base); }
+.hero-note { margin: var(--space-1) 0 0; color: var(--hero-muted); font-size: var(--text-xs); opacity: 0.9; }
+.hero-facts { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); margin: 0; padding-top: var(--space-4); border-top: 1px solid var(--hero-line); }
+.hero-facts dt { font-size: var(--text-xs); color: var(--hero-muted); }
+.hero-facts dd { margin: 2px 0 0; font-size: var(--text-md); font-weight: 650; display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.hero-link {
+  display: inline-flex; align-items: center; gap: 2px; color: var(--hero-text); font-size: var(--text-xs); font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hero-line);
+}
+.hero-link .icon { display: inline-block; }
 .hero-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); position: relative; z-index: 1; }
 .hero-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-full);
@@ -811,8 +820,25 @@ a { color: var(--accent-text); }
 .seg-free { background: var(--seg-free); }
 .plan { display: flex; flex-direction: column; gap: var(--space-4); }
 .plan .card-head { margin-bottom: 0; }
-.plan-income { margin: 0; font-size: var(--text-base); }
-.plan-income strong { font-size: var(--text-xl); letter-spacing: -0.01em; }
+.plan-income { margin: 0; font-size: var(--text-base); display: flex; flex-direction: column; gap: 2px; }
+.plan-income p { margin: 0; }
+.plan-income strong { font-size: var(--text-lg); letter-spacing: -0.01em; }
+.plan-lead {
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--surface-sage); border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+}
+.plan-lead-label { font-size: var(--text-sm); color: var(--muted); font-weight: 550; }
+.plan-lead-value { font-size: var(--text-2xl); font-weight: 700; letter-spacing: var(--tracking-tight); line-height: 1.15; }
+.plan-lead-value.is-over { color: var(--danger); }
+.plan-lead-sub { font-size: var(--text-sm); color: var(--muted); }
+.plan-lead-sub strong { color: var(--text); }
+.plan-lead .meter { background: var(--surface); }
+.plan-lead .meter-fill { background: var(--income); }
+.glossary { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.glossary div { display: flex; flex-direction: column; gap: 2px; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.glossary div:first-child { border-top: 0; padding-top: 0; }
+.glossary dt { font-weight: 600; font-size: var(--text-base); }
+.glossary dd { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .plan-income-parts { display: block; color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
 .plan-bar { display: flex; height: 12px; border-radius: var(--radius-full); overflow: hidden; background: var(--surface-2); gap: 2px; }
 .plan-bar .seg { height: 100%; min-width: 3px; }
