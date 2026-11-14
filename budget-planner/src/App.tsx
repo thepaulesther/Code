@@ -5,16 +5,17 @@ import { ExportDialog } from './components/ExportDialog';
 import { ImportDialog } from './components/ImportDialog';
 import { RecurringPanel } from './components/RecurringPanel';
 import { SettingsDialog } from './components/SettingsDialog';
-import { TransactionForm } from './components/TransactionForm';
+import { TransactionForm, type RepeatEvery } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
   budgetStatus,
+  effectiveInMonth,
   formatMoney,
-  inMonth,
   monthLabel,
   monthOf,
   monthlyTrend,
   newId,
+  shareAmount,
   shiftMonth,
   shortDate,
   spendingByCategory,
@@ -62,40 +63,49 @@ export default function App() {
   );
   const money = (n: number) => formatMoney(n, settings.currency, { narrow: true });
 
-  const monthTx = useMemo(() => inMonth(transactions, month), [transactions, month]);
+  // What counts this month: its own transactions plus this month's share of spread payments (yearly rent).
+  const monthTx = useMemo(() => effectiveInMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
-  const prev = useMemo(() => totals(inMonth(transactions, shiftMonth(month, -1))), [transactions, month]);
+  const prev = useMemo(() => totals(effectiveInMonth(transactions, shiftMonth(month, -1))), [transactions, month]);
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
   const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
 
-  const add = (tx: Transaction, repeatMonthly: boolean) => {
-    if (repeatMonthly) {
+  const add = (tx: Transaction, repeatEvery: RepeatEvery) => {
+    const spreadNote = tx.spread
+      ? ` It counts as ${money(shareAmount(tx.amount, tx.spread, 0))} a month for ${tx.spread} months.`
+      : '';
+    if (repeatEvery) {
       const today = todayISO();
       const rule: RecurringRule = {
         id: newId(),
         type: tx.type,
         amount: tx.original ? tx.original.amount : tx.amount,
         ...(tx.original ? { currency: tx.original.currency, rate: tx.original.rate } : {}),
+        ...(repeatEvery === 12 ? { everyMonths: 12 } : {}),
+        ...(tx.spread ? { spreadMonths: tx.spread } : {}),
         category: tx.category,
         note: tx.note,
         day: Number(tx.date.slice(8, 10)),
         startMonth: monthOf(tx.date),
       };
       const backfilled = dueOccurrences(rule, today).length;
-      // Months added now use the rate just entered; later months use the latest rate.
+      // Payments added now use the rate just entered; later ones use the latest rate.
       const { created, rules } = materialize([rule], today, () => rule.rate ?? null);
       setData((d) => ({ ...d, recurring: [...d.recurring, ...rules], transactions: [...d.transactions, ...created] }));
+      const when = repeatEvery === 12 ? `every year on ${shortDate(tx.date)}` : `on the ${ordinal(rule.day)} of every month`;
+      const unit = repeatEvery === 12 ? 'years' : 'months';
       setToast(
-        backfilled === 0
+        (backfilled === 0
           ? `Scheduled. The first one will be added on ${shortDate(tx.date)}.`
           : backfilled === 1
-            ? `Added. It will repeat on the ${ordinal(rule.day)} of every month.`
-            : `Added ${backfilled} months, starting ${shortDate(tx.date)}. It will keep repeating on the ${ordinal(rule.day)}.`,
+            ? `Added. It will repeat ${when}.`
+            : `Added ${backfilled} ${unit}, starting ${shortDate(tx.date)}. It will keep repeating ${when}.`) + spreadNote,
       );
     } else {
       setData((d) => ({ ...d, transactions: [...d.transactions, tx] }));
+      if (spreadNote) setToast(`Added.${spreadNote}`);
     }
     setMonth(monthOf(tx.date));
   };

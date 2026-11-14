@@ -12,6 +12,16 @@ export interface Transaction {
   recurringId?: string; // set when created by a repeating rule
   /** Set when entered in another currency: `amount` = round(original.amount * original.rate). */
   original?: Money;
+  /**
+   * Count this payment across this many months (2+), starting the month it was paid.
+   * E.g. ₦3,000,000 yearly rent with spread 12 counts as ₦250,000 a month.
+   */
+  spread?: number;
+}
+
+/** A transaction as it counts in one month: spread payments appear as their monthly share. */
+export interface Entry extends Transaction {
+  share?: { index: number; of: number; total: number };
 }
 
 /** An amount in a non-base currency and the rate used: `rate` base units per 1 unit of `currency`. */
@@ -79,6 +89,40 @@ export const shortDate = (date: string) =>
 export const inMonth = (txs: Transaction[], month: string) =>
   txs.filter((t) => monthOf(t.date) === month);
 
+/** Whole months from `from` to `to` ("2026-11" -> "2027-02" = 3). */
+export function monthDiff(from: string, to: string): number {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/** The k-th (0-based) of n equal shares; the last one absorbs rounding so the shares add up exactly. */
+export function shareAmount(total: number, n: number, k: number): number {
+  const each = round2(total / n);
+  return k === n - 1 ? round2(total - each * (n - 1)) : each;
+}
+
+export const isSpread = (t: Pick<Transaction, 'spread'>) => !!t.spread && t.spread > 1;
+
+/**
+ * What counts in `month`: ordinary transactions dated that month, plus this month's share of any
+ * payment spread over several months (like yearly rent). Use this for totals, budgets and charts.
+ */
+export function effectiveInMonth(txs: Transaction[], month: string): Entry[] {
+  const out: Entry[] = [];
+  for (const t of txs) {
+    if (!isSpread(t)) {
+      if (monthOf(t.date) === month) out.push(t);
+      continue;
+    }
+    const n = t.spread!;
+    const k = monthDiff(monthOf(t.date), month);
+    if (k < 0 || k >= n) continue;
+    out.push({ ...t, amount: shareAmount(t.amount, n, k), share: { index: k + 1, of: n, total: t.amount } });
+  }
+  return out;
+}
+
 export interface Totals {
   income: number;
   expense: number;
@@ -113,7 +157,7 @@ export function spendingByCategory(txs: Transaction[]): { category: string; amou
 export function monthlyTrend(txs: Transaction[], endMonth: string, count = 6) {
   return Array.from({ length: count }, (_, i) => {
     const month = shiftMonth(endMonth, i - (count - 1));
-    const { income, expense } = totals(inMonth(txs, month));
+    const { income, expense } = totals(effectiveInMonth(txs, month));
     return { month, income, expense };
   });
 }
@@ -160,7 +204,7 @@ const csvCell = (v: string | number) => {
 };
 
 export function toCSV(txs: Transaction[]): string {
-  const header = ['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate'];
+  const header = ['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate', 'spread_months'];
   const rows = [...txs]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((t) =>
@@ -173,6 +217,7 @@ export function toCSV(txs: Transaction[]): string {
         t.original ? t.original.amount.toFixed(2) : '',
         t.original?.currency ?? '',
         t.original ? String(t.original.rate) : '',
+        isSpread(t) ? String(t.spread) : '',
       ]
         .map(csvCell)
         .join(','),

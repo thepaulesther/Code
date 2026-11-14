@@ -78,8 +78,10 @@ describe('guessMapping', () => {
     expect(guessMapping(['Date', 'Payee', 'Money Out', 'Money In'])).toMatchObject({ date: 0, note: 1, debit: 2, credit: 3, amount: -1 });
   });
   it('maps our own export', () => {
-    expect(guessMapping(['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate'])).toEqual({
-      date: 0, type: 1, category: 2, amount: 3, note: 4, debit: -1, credit: -1, origAmount: 5, origCurrency: 6, rate: 7,
+    expect(
+      guessMapping(['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate', 'spread_months']),
+    ).toEqual({
+      date: 0, type: 1, category: 2, amount: 3, note: 4, debit: -1, credit: -1, origAmount: 5, origCurrency: 6, rate: 7, spread: 8,
     });
   });
   it('treats a Debit/Credit column as the type when there is an amount', () => {
@@ -160,6 +162,13 @@ describe('buildImport', () => {
     // Importing the same file again finds only duplicates.
     const again = buildImport(rows, { ...base, map: guessMapping(header), existing: txs });
     expect(again.every((r) => r.status === 'duplicate')).toBe(true);
+  });
+
+  it('round-trips a spread (yearly) payment', () => {
+    const txs: Transaction[] = [{ id: '1', type: 'expense', amount: 3_000_000, category: 'Housing', note: 'Rent', date: '2026-01-05', spread: 12 }];
+    const [header, ...rows] = parseCSV(toCSV(txs));
+    const out = buildImport(rows, { ...base, base: 'NGN', map: guessMapping(header) });
+    expect(out[0].tx).toMatchObject({ amount: 3_000_000, spread: 12, category: 'Housing' });
   });
 
   it('converts a statement in another currency into the base currency', () => {

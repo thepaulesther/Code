@@ -8,7 +8,8 @@ A small, private budget planner. Track income and expenses, set monthly limits p
 - **6-month trend chart**: click a month to jump to it
 - **Spending donut**: by category, with hover to highlight
 - **Category budgets**: progress meters that turn amber at 80% and red when over
-- **Repeating transactions**: tick “Repeat every month” for rent, salary or subscriptions. Each one is added on its day, including any months missed while the app was closed. You can pause, resume or stop them from the Repeating panel.
+- **Repeating transactions**: set “Repeats” to every month or every year for salary, subscriptions or rent. Each one is added on its day, including any months missed while the app was closed. You can pause, resume or stop them from the Repeating panel.
+- **Yearly and multi-month costs**: rent paid once a year (common in Nigeria), school fees or insurance can be spread with “Counts toward: 12 months”. A ₦3,000,000 yearly rent then counts as ₦250,000 in each of the 12 months from the month you pay, in totals, the savings rate, budgets and charts. The list shows each month’s share (“11 of 12 · paid Jan 5”). Repeating items can be **monthly or yearly**; choosing yearly spreads over 12 months automatically.
 - **Your own categories**: add, rename (updates every transaction, budget and repeating item) or remove them in Settings
 - **CSV import**: from your bank or card. Columns are detected automatically, and you can fix them before importing. It handles:
   - comma, semicolon or tab separators

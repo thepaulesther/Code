@@ -1,6 +1,6 @@
-import { monthOf, round2, shiftMonth, type Transaction, type TxType } from './budget';
+import { monthDiff, monthOf, round2, shiftMonth, type Transaction, type TxType } from './budget';
 
-/** A transaction that repeats every month on `day` (clamped to short months). */
+/** A transaction that repeats every month (or every year) on `day` (clamped to short months). */
 export interface RecurringRule {
   id: string;
   type: TxType;
@@ -14,9 +14,16 @@ export interface RecurringRule {
   note: string;
   day: number; // 1..31
   startMonth: string; // YYYY-MM of the first occurrence
+  /** 1 = monthly (default), 12 = yearly. */
+  everyMonths?: number;
+  /** Each payment counts across this many months (e.g. yearly rent spread over 12). */
+  spreadMonths?: number;
   lastGenerated?: string; // YYYY-MM of the latest occurrence already turned into a transaction
   paused?: boolean;
 }
+
+export const intervalOf = (rule: Pick<RecurringRule, 'everyMonths'>) =>
+  rule.everyMonths && rule.everyMonths > 1 ? rule.everyMonths : 1;
 
 export function daysInMonth(month: string): number {
   const [y, m] = month.split('-').map(Number);
@@ -28,7 +35,7 @@ export const dateForMonth = (month: string, day: number) =>
   `${month}-${String(Math.min(day, daysInMonth(month))).padStart(2, '0')}`;
 
 const firstPendingMonth = (rule: RecurringRule) => {
-  const afterLast = rule.lastGenerated ? shiftMonth(rule.lastGenerated, 1) : rule.startMonth;
+  const afterLast = rule.lastGenerated ? shiftMonth(rule.lastGenerated, intervalOf(rule)) : rule.startMonth;
   return afterLast > rule.startMonth ? afterLast : rule.startMonth;
 };
 
@@ -37,7 +44,8 @@ export function dueOccurrences(rule: RecurringRule, today: string): string[] {
   if (rule.paused) return [];
   const out: string[] = [];
   const end = monthOf(today);
-  for (let m = firstPendingMonth(rule); m <= end; m = shiftMonth(m, 1)) {
+  const step = intervalOf(rule);
+  for (let m = firstPendingMonth(rule); m <= end; m = shiftMonth(m, step)) {
     const date = dateForMonth(m, rule.day);
     if (date > today) break;
     out.push(date);
@@ -51,16 +59,20 @@ export function nextOccurrence(rule: RecurringRule, today: string): string | nul
   const due = dueOccurrences(rule, today);
   if (due.length) return due[0];
   let m = firstPendingMonth(rule);
-  while (dateForMonth(m, rule.day) <= today) m = shiftMonth(m, 1);
+  while (dateForMonth(m, rule.day) <= today) m = shiftMonth(m, intervalOf(rule));
   return dateForMonth(m, rule.day);
 }
 
-/** A rule's monthly amount in the base currency, using `rateFor` or the rule's last rate. */
+/** One payment of the rule in the base currency, using `rateFor` or the rule's last rate. */
 export function ruleBaseAmount(rule: RecurringRule, rateFor?: (currency: string) => number | null): number {
   if (!rule.currency) return rule.amount;
   const rate = rateFor?.(rule.currency) ?? rule.rate ?? 1;
   return round2(rule.amount * rate);
 }
+
+/** What the rule costs (or brings in) per month on average: a ₦3M yearly rent is ₦250k a month. */
+export const ruleMonthlyAmount = (rule: RecurringRule, rateFor?: (currency: string) => number | null) =>
+  round2(ruleBaseAmount(rule, rateFor) / intervalOf(rule));
 
 /**
  * Turn every due occurrence into a transaction. Transaction ids are derived from
@@ -89,6 +101,7 @@ export function materialize(
         date,
         recurringId: r.id,
         ...(r.currency && rate ? { original: { amount: r.amount, currency: r.currency, rate } } : {}),
+        ...(r.spreadMonths && r.spreadMonths > 1 ? { spread: r.spreadMonths } : {}),
       });
     }
     return { ...r, lastGenerated: monthOf(dates[dates.length - 1]), ...(rate ? { rate } : {}) };
@@ -96,12 +109,21 @@ export function materialize(
   return { created, rules: changed ? next : rules };
 }
 
-/** Resume a paused rule without back-filling the months it was paused for. */
+/** The latest month on the rule's schedule that is at or before `month`, or null if before the start. */
+function scheduledAtOrBefore(rule: RecurringRule, month: string): string | null {
+  const diff = monthDiff(rule.startMonth, month);
+  if (diff < 0) return null;
+  return shiftMonth(rule.startMonth, diff - (diff % intervalOf(rule)));
+}
+
+/** Resume a paused rule without back-filling the occurrences it was paused for. */
 export function resumeRule(rule: RecurringRule, today: string): RecurringRule {
-  const cur = monthOf(today);
-  const skipThrough = dateForMonth(cur, rule.day) <= today ? cur : shiftMonth(cur, -1);
-  const last = rule.lastGenerated && rule.lastGenerated > skipThrough ? rule.lastGenerated : skipThrough;
-  return { ...rule, paused: false, lastGenerated: last };
+  let skip = scheduledAtOrBefore(rule, monthOf(today));
+  if (skip && dateForMonth(skip, rule.day) > today) skip = scheduledAtOrBefore(rule, shiftMonth(skip, -1));
+  const last = skip && (!rule.lastGenerated || skip > rule.lastGenerated) ? skip : rule.lastGenerated;
+  const resumed: RecurringRule = { ...rule, paused: false };
+  if (last) resumed.lastGenerated = last;
+  return resumed;
 }
 
 export function ordinal(n: number): string {

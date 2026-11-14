@@ -1,7 +1,17 @@
 import { useState } from 'react';
-import { formatMoney, shortDate, todayISO } from '../lib/budget';
+import { formatMoney, monthLabel, shortDate, todayISO } from '../lib/budget';
 import { useFormat } from '../lib/format';
-import { nextOccurrence, ordinal, ruleBaseAmount, type RecurringRule } from '../lib/recurring';
+import {
+  intervalOf,
+  nextOccurrence,
+  ordinal,
+  ruleBaseAmount,
+  ruleMonthlyAmount,
+  type RecurringRule,
+} from '../lib/recurring';
+
+const fullDate = (date: string) =>
+  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
 export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
   rules: RecurringRule[];
@@ -15,8 +25,9 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
   const today = todayISO();
 
   const active = rules.filter((r) => !r.paused);
+  // Per-month equivalent, so yearly rent counts as 1/12 here too.
   const sum = (type: 'income' | 'expense') =>
-    active.filter((r) => r.type === type).reduce((s, r) => s + ruleBaseAmount(r, rateFor), 0);
+    active.filter((r) => r.type === type).reduce((s, r) => s + ruleMonthlyAmount(r, rateFor), 0);
   const sorted = [...rules].sort((a, b) => Number(!!a.paused) - Number(!!b.paused) || a.day - b.day);
   const anyForeign = active.some((r) => r.currency);
 
@@ -26,13 +37,16 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
         <h2>Repeating</h2>
         {rules.length > 0 && (
           <span className="muted num small" title={anyForeign ? 'Foreign-currency items at the latest rate' : undefined}>
-            <span className="income-text">+{money(sum('income'), { compact: true })}</span> · −{money(sum('expense'), { compact: true })} / mo
+            {sum('income') > 0 && <span className="income-text">+{money(sum('income'), { compact: true })}</span>}
+            {sum('income') > 0 && sum('expense') > 0 && ' · '}
+            {sum('expense') > 0 && `−${money(sum('expense'), { compact: true })}`}
+            {(sum('income') > 0 || sum('expense') > 0) && ' / mo'}
           </span>
         )}
       </div>
       {rules.length === 0 ? (
         <p className="empty">
-          Tick “Repeat every month” when adding rent, salary or a subscription, and it will be added automatically
+          Set “Repeats” when adding a salary, a subscription or a yearly rent, and it will be added automatically
           on its day.
         </p>
       ) : (
@@ -40,13 +54,19 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
           {sorted.map((r) => {
             const next = nextOccurrence(r, today);
             const sign = r.type === 'income' ? '+' : '−';
+            const yearly = intervalOf(r) === 12;
+            const schedule = yearly
+              ? `Yearly on ${monthLabel(r.startMonth, 'short')} ${r.day}`
+              : `Monthly on the ${ordinal(r.day)}`;
+            const nextLabel = next ? (next.slice(0, 4) === today.slice(0, 4) ? shortDate(next) : fullDate(next)) : '';
+            const showMonthly = yearly || (r.spreadMonths ?? 1) > 1;
             return (
               <li key={r.id} className={r.paused ? 'is-paused' : ''}>
                 <span className="dot" style={{ background: r.type === 'income' ? 'var(--income)' : color(r.category) }} />
                 <div className="row-main">
                   <span className="row-title">{r.note || r.category}</span>
                   <span className="row-sub">
-                    {r.paused ? 'Paused' : `Monthly on the ${ordinal(r.day)}${next ? ` · next ${shortDate(next)}` : ''}`}
+                    {r.paused ? 'Paused' : `${schedule}${nextLabel ? ` · next ${nextLabel}` : ''}`}
                   </span>
                 </div>
                 <div className="row-amts">
@@ -54,7 +74,8 @@ export function RecurringPanel({ rules, rateFor, onToggle, onDelete }: {
                     {sign}
                     {r.currency ? formatMoney(r.amount, r.currency) : money(r.amount)}
                   </span>
-                  {r.currency && <span className="row-orig num">≈ {money(ruleBaseAmount(r, rateFor))}</span>}
+                  {r.currency && !showMonthly && <span className="row-orig num">≈ {money(ruleBaseAmount(r, rateFor))}</span>}
+                  {showMonthly && <span className="row-orig num">≈ {money(ruleMonthlyAmount(r, rateFor))} / mo</span>}
                 </div>
                 <div className="rec-actions">
                   {confirming === r.id ? (

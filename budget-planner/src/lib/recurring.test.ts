@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { dateForMonth, dueOccurrences, materialize, nextOccurrence, ordinal, resumeRule, ruleBaseAmount, type RecurringRule } from './recurring';
+import {
+  dateForMonth,
+  dueOccurrences,
+  materialize,
+  nextOccurrence,
+  ordinal,
+  resumeRule,
+  ruleBaseAmount,
+  ruleMonthlyAmount,
+  type RecurringRule,
+} from './recurring';
 
 const rule = (p: Partial<RecurringRule> = {}): RecurringRule => ({
   id: 'r1',
@@ -72,6 +82,35 @@ describe('foreign-currency rules', () => {
     expect(ruleBaseAmount(salary)).toBe(7000000);
     expect(ruleBaseAmount(salary, () => 1500)).toBe(7500000);
     expect(ruleBaseAmount(rule())).toBe(1450);
+  });
+});
+
+describe('yearly rules (e.g. rent paid once a year)', () => {
+  const rent = rule({ id: 'y', amount: 3_000_000, day: 5, startMonth: '2026-01', everyMonths: 12, spreadMonths: 12 });
+
+  it('falls due once a year, on the same day', () => {
+    expect(dueOccurrences(rent, '2026-11-14')).toEqual(['2026-01-05']);
+    expect(dueOccurrences(rent, '2028-02-01')).toEqual(['2026-01-05', '2027-01-05', '2028-01-05']);
+    expect(dueOccurrences({ ...rent, lastGenerated: '2026-01' }, '2026-12-31')).toEqual([]);
+    expect(nextOccurrence({ ...rent, lastGenerated: '2026-01' }, '2026-11-14')).toBe('2027-01-05');
+  });
+
+  it('creates spread transactions and averages ₦250,000 a month', () => {
+    const { created, rules } = materialize([rent], '2026-11-14');
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ id: 'y:2026-01', amount: 3_000_000, spread: 12, date: '2026-01-05' });
+    expect(rules[0].lastGenerated).toBe('2026-01');
+    expect(ruleMonthlyAmount(rent)).toBe(250_000);
+    expect(ruleMonthlyAmount(rule())).toBe(1450);
+  });
+
+  it('resumes on schedule without back-filling a missed year', () => {
+    const paused = { ...rent, paused: true, lastGenerated: '2026-01' };
+    const r1 = resumeRule(paused, '2027-03-01'); // Jan 2027 was missed while paused
+    expect(dueOccurrences(r1, '2027-03-01')).toEqual([]);
+    expect(nextOccurrence(r1, '2027-03-01')).toBe('2028-01-05');
+    const r2 = resumeRule(paused, '2026-12-20'); // resumed before the next due date
+    expect(nextOccurrence(r2, '2026-12-20')).toBe('2027-01-05');
   });
 });
 

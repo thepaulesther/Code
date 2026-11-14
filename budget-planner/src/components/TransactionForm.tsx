@@ -1,9 +1,31 @@
 import { useState, type FormEvent } from 'react';
-import { currencySymbol, newId, parseAmount, shortDate, todayISO, type Transaction, type TxType } from '../lib/budget';
+import {
+  currencySymbol,
+  monthLabel,
+  monthOf,
+  newId,
+  parseAmount,
+  shiftMonth,
+  shortDate,
+  todayISO,
+  type Transaction,
+  type TxType,
+} from '../lib/budget';
 import { conversionRate, parseRate, rateForInput, round2, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
 import { ordinal } from '../lib/recurring';
 import { CurrencySelect, RateField } from './CurrencyFields';
+
+/** 0 = one-off, 1 = every month, 12 = every year. */
+export type RepeatEvery = 0 | 1 | 12;
+
+const SPREAD_OPTIONS: [number, string][] = [
+  [1, 'This month only'],
+  [3, '3 months'],
+  [6, '6 months'],
+  [12, '12 months'],
+  [24, '24 months'],
+];
 
 export function TransactionForm({ expenseCategories, incomeCategories, rates, ratesStatus, onRefreshRates, onAdd }: {
   expenseCategories: string[];
@@ -11,7 +33,7 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   rates?: RateCache;
   ratesStatus: RatesStatus;
   onRefreshRates: (() => void) | null;
-  onAdd: (t: Transaction, repeatMonthly: boolean) => void;
+  onAdd: (t: Transaction, repeatEvery: RepeatEvery) => void;
 }) {
   const { money, currency: base } = useFormat();
   const [type, setType] = useState<TxType>('expense');
@@ -22,7 +44,8 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
   const [category, setCategory] = useState('Groceries');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(todayISO());
-  const [repeat, setRepeat] = useState(false);
+  const [repeat, setRepeat] = useState<RepeatEvery>(0);
+  const [spread, setSpread] = useState(1);
   const [error, setError] = useState('');
 
   const categories = type === 'expense' ? expenseCategories : incomeCategories;
@@ -57,12 +80,14 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
         note: note.trim(),
         date,
         ...(foreign ? { original: { amount: value, currency, rate: r } } : {}),
+        ...(spread > 1 ? { spread } : {}),
       },
       repeat,
     );
     setAmount('');
     setNote('');
-    setRepeat(false);
+    setRepeat(0);
+    setSpread(1);
     setRateText(null); // a rate typed for one payment shouldn't silently apply to the next
     setError('');
   };
@@ -156,22 +181,52 @@ export function TransactionForm({ expenseCategories, incomeCategories, rates, ra
         <span>Note <em>(optional)</em></span>
         <input id="tx-note" placeholder="e.g. Farmers market" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} />
       </label>
-      <label className="check">
-        <input id="tx-repeat" type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} />
-        <span>
-          Repeat every month
-          {repeat && day > 0 && (
-            <small>
-              On the {ordinal(day)}, starting {shortDate(date)}
-              {day > 28 && ' (or the last day of shorter months)'}
-              {foreign && `. Later months convert at the latest ${currency} rate.`}
-            </small>
+      <div className="field-row">
+        <label className="field">
+          <span>Repeats</span>
+          <select
+            id="tx-repeat"
+            value={repeat}
+            onChange={(e) => {
+              const next = Number(e.target.value) as RepeatEvery;
+              setRepeat(next);
+              // A yearly bill (rent, insurance, school fees) normally counts as 1/12 each month.
+              if (next === 12 && spread === 1) setSpread(12);
+              if (next !== 12 && repeat === 12 && spread === 12) setSpread(1);
+            }}
+          >
+            <option value={0}>Doesn’t repeat</option>
+            <option value={1}>Every month</option>
+            <option value={12}>Every year</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Counts toward</span>
+          <select id="tx-spread" value={spread} onChange={(e) => setSpread(Number(e.target.value))}>
+            {SPREAD_OPTIONS.map(([n, label]) => (
+              <option key={n} value={n}>{label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {(repeat > 0 || spread > 1) && day > 0 && (
+        <p className="form-note">
+          {spread > 1 && value != null && rate != null && (
+            <>
+              <strong className="num">{money(round2((value * rate) / spread))}</strong> a month,{' '}
+              {monthLabel(monthOf(date), 'short')} {date.slice(0, 4)} – {monthLabel(shiftMonth(monthOf(date), spread - 1), 'short')}{' '}
+              {shiftMonth(monthOf(date), spread - 1).slice(0, 4)}.{' '}
+            </>
           )}
-        </span>
-      </label>
+          {spread > 1 && (value == null || rate == null) && `Split evenly over ${spread} months from ${monthLabel(monthOf(date))}. `}
+          {repeat === 1 && <>Repeats on the {ordinal(day)} of every month{day > 28 && ' (or the last day of shorter months)'}. </>}
+          {repeat === 12 && <>Repeats every year on {shortDate(date)}. </>}
+          {repeat > 0 && foreign && `Later payments convert at the latest ${currency} rate.`}
+        </p>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" className="btn-primary">
-        {repeat ? `Add monthly ${type}` : `Add ${type}`}
+        {repeat === 1 ? `Add monthly ${type}` : repeat === 12 ? `Add yearly ${type}` : `Add ${type}`}
       </button>
     </form>
   );

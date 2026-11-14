@@ -110,10 +110,11 @@ export interface ColumnMap {
   origAmount: number;
   origCurrency: number;
   rate: number;
+  spread: number;
 }
 
 export const EMPTY_MAP: ColumnMap = {
-  date: -1, amount: -1, debit: -1, credit: -1, note: -1, category: -1, type: -1, origAmount: -1, origCurrency: -1, rate: -1,
+  date: -1, amount: -1, debit: -1, credit: -1, note: -1, category: -1, type: -1, origAmount: -1, origCurrency: -1, rate: -1, spread: -1,
 };
 
 /** Guess columns from a header row. `date === -1` means it doesn't look like a header. */
@@ -130,6 +131,7 @@ export function guessMapping(header: string[]): ColumnMap {
   map.origAmount = find(/^original[ _]amount$/);
   map.origCurrency = find(/^original[ _]currency$/);
   map.rate = find(/^(exchange[ _])?rate$/);
+  map.spread = find(/^spread[ _]months$/);
   map.date = find(/date/);
   map.type = find(/^type$|transaction type|^kind$|debit\s*\/\s*credit|credit\s*\/\s*debit|^dr\/cr$|^cr\/dr$/);
   map.category = find(/categor/);
@@ -256,6 +258,8 @@ export function buildImport(rows: string[][], o: ImportOptions): ImportRow[] {
       date,
       ...(original ? { original } : {}),
     };
+    const spread = Number.parseInt(cell(map.spread), 10);
+    if (spread > 1 && spread <= 120) tx.spread = spread;
     return { line, tx, status: seen.has(dupKey(tx)) ? 'duplicate' : 'new' };
   });
 }

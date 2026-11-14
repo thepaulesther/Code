@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
-import { formatMoney, shortDate, type Transaction } from '../lib/budget';
+import { formatMoney, shortDate, type Entry } from '../lib/budget';
 import { formatRate } from '../lib/currency';
 import { useFormat } from '../lib/format';
 
 type Filter = 'all' | 'income' | 'expense';
 
+const fullDate = (date: string) =>
+  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
 export function TransactionList({ transactions, onDelete }: {
-  transactions: Transaction[];
+  /** This month's entries, including shares of spread payments. */
+  transactions: Entry[];
   onDelete: (id: string) => void;
 }) {
   const { money, color } = useFormat();
@@ -56,30 +60,43 @@ export function TransactionList({ transactions, onDelete }: {
               <div className="row-main">
                 <span className="row-title">
                   {t.note || t.category}
-                  {t.recurringId && <span className="badge" title="Repeats monthly">↻ monthly</span>}
+                  {t.recurringId && <span className="badge" title="Added by a repeating item">↻ repeats</span>}
+                  {t.share && (
+                    <span className="badge share" title={`This month’s share of a payment spread over ${t.share.of} months`}>
+                      {t.share.index} of {t.share.of}
+                    </span>
+                  )}
                 </span>
-                <span className="row-sub">{t.category} · {shortDate(t.date)}</span>
+                <span className="row-sub">
+                  {t.category} · {t.share && t.share.index > 1 ? `paid ${fullDate(t.date)}` : shortDate(t.date)}
+                </span>
               </div>
               <div className="row-amts">
                 <span className={`num row-amt ${t.type}`}>
                   {t.type === 'income' ? '+' : '−'}
                   {money(t.amount)}
                 </span>
+                {t.share && <span className="row-orig num">of {money(t.share.total)}</span>}
                 {t.original && (
                   <span className="row-orig num" title={`Converted at 1 ${t.original.currency} = ${formatRate(t.original.rate)}`}>
                     {formatMoney(t.original.amount, t.original.currency)} @ {formatRate(t.original.rate)}
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => onDelete(t.id)}
-                aria-label={`Delete ${t.note || t.category}`}
-                title="Delete"
-              >
-                ×
-              </button>
+              {t.share && t.share.index > 1 ? (
+                // Later shares of an earlier payment: delete it from the month it was paid.
+                <span aria-hidden />
+              ) : (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => onDelete(t.id)}
+                  aria-label={`Delete ${t.note || t.category}${t.share ? ` (all ${t.share.of} months)` : ''}`}
+                  title={t.share ? `Delete the whole payment (all ${t.share.of} months)` : 'Delete'}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))}
         </ul>
