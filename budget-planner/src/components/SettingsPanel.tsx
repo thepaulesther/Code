@@ -16,6 +16,7 @@ import {
   type Theme,
 } from '../lib/store';
 import { CurrencySelect, RateField } from './CurrencyFields';
+import { Icon } from './ui/Icon';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
 
@@ -222,9 +223,14 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
 }
 
 /** The Settings page. */
-export function SettingsPanel({ onReset, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onShowSetup, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
   /** Called after "Delete all data". */
   onReset: () => void;
+  onExport: () => void;
+  canExport: boolean;
+  /** The Overview's setup guide was hidden on this device. */
+  setupHidden: boolean;
+  onShowSetup: () => void;
   data: AppData;
   setData: SetData;
   showInstallHelp: boolean;
@@ -280,8 +286,25 @@ export function SettingsPanel({ onReset, data, setData, showInstallHelp, ratesSt
         <h3>Your data</h3>
         <p className="hint">
           Everything is stored in this browser only: {data.transactions.length} transactions,{' '}
-          {data.recurring.length} repeating items. Use Export to back it up or move it to another device.
+          {data.recurring.length} repeating items, {(data.goals ?? []).length} goals and{' '}
+          {Object.keys(data.budgets).length} budgets. Nothing is sent to a server.
         </p>
+        <p className="data-warning">
+          <Icon name="alert" size={16} />
+          <span>
+            Clearing this browser’s site data, browsing privately, or switching to another browser or device means
+            starting without it. Export your transactions as a CSV now and then: you can import the file on any device.
+            The CSV holds transactions only, so note your budgets and goals separately.
+          </span>
+        </p>
+        <div className="head-actions">
+          <button type="button" className="btn-secondary sm" onClick={onExport} disabled={!canExport}>
+            <Icon name="export" size={16} /> Export transactions (CSV)
+          </button>
+          {setupHidden && (
+            <button type="button" className="btn-ghost sm" onClick={onShowSetup}>Show the setup guide</button>
+          )}
+        </div>
         {confirmReset ? (
           <div className="confirm-row" role="alert">
             <span>Delete all transactions, budgets, goals and repeating items? This can’t be undone.</span>

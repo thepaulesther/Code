@@ -35,7 +35,6 @@ import {
   changeBaseCurrency,
   editTransaction,
   hasSamples,
-  isEmpty,
   addToGoal,
   alertSettingsOf,
   deleteGoal,
@@ -67,6 +66,8 @@ import { EmptyState } from './components/ui/EmptyState';
 import { BalanceHero } from './components/overview/BalanceHero';
 import { InsightsCard } from './components/overview/InsightsCard';
 import { QuickActions } from './components/overview/QuickActions';
+import { OverviewPreview, SetupGuide, type SetupStep } from './components/overview/SetupGuide';
+import { useSetupPrefs } from './lib/setup';
 import { overviewInsights } from './lib/insights';
 
 const CURRENT_MONTH = monthOf(todayISO());
@@ -375,6 +376,7 @@ export default function App() {
     return () => io.disconnect();
   }, [route, hasAnyTransactions]);
 
+  const setup = useSetupPrefs();
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
@@ -408,33 +410,57 @@ export default function App() {
     </button>
   );
 
-  const welcome = isEmpty(data) && (
-    <section className="welcome" aria-labelledby="welcome-title">
-      <span className="welcome-icon"><Icon name="leaf" size={26} /></span>
-      <div>
-        <h2 id="welcome-title">Welcome to Elora</h2>
-        <p className="welcome-lead">Your budget is empty. Three short steps and you’re set up.</p>
-        <ol>
-          <li>
-            <div>
-              <label htmlFor="welcome-currency">Choose the currency your totals should be in</label>
-              <CurrencySelect id="welcome-currency" label="Base currency" value={settings.currency} onChange={chooseBase} />
-            </div>
-          </li>
-          <li>
-            <div>
-              Add your income and spending with <strong>Add transaction</strong>. Amounts in other currencies are converted.
-            </div>
-          </li>
-          <li>
-            <div>
-              For bills paid once a year, such as rent, set <strong>Repeats: Every year</strong>. The cost then counts as one
-              twelfth in each month.
-            </div>
-          </li>
-        </ol>
-      </div>
-    </section>
+  const hasCurrency = !!settings.currency;
+  const setupSteps: SetupStep[] = [
+    {
+      id: 'currency',
+      title: 'Choose your currency',
+      detail: 'Totals, budgets and charts use it. You can still enter amounts in other currencies.',
+      done: hasCurrency,
+      optional: false,
+      content: <CurrencySelect id="welcome-currency" label="Base currency" value={settings.currency} onChange={chooseBase} />,
+    },
+    {
+      id: 'income',
+      title: 'Add your income',
+      detail: 'Your salary or any other money coming in. Set it to repeat if it arrives every month.',
+      done: transactions.some((x) => x.type === 'income'),
+      optional: true,
+      action: { label: 'Add income', onClick: () => setAdding('income'), disabled: !hasCurrency },
+    },
+    {
+      id: 'expense',
+      title: 'Record your spending',
+      detail: (
+        <>
+          Start with the big ones: rent, bills, groceries. Rent paid once a year? Choose <strong>Repeats: Every year</strong>{' '}
+          and it counts as a twelfth in each month.
+        </>
+      ),
+      done: transactions.some((x) => x.type === 'expense'),
+      optional: true,
+      action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
+    },
+    {
+      id: 'budgets',
+      title: 'Set monthly budgets',
+      detail: 'Pick limits for the categories you want to keep an eye on.',
+      done: Object.keys(budgets).length > 0,
+      optional: true,
+      action: { label: 'Set budgets', onClick: () => navigate('budgets'), disabled: !hasCurrency },
+    },
+    {
+      id: 'goal',
+      title: 'Set a savings goal',
+      detail: 'An emergency fund of about three months of spending is a good first goal.',
+      done: goals.length > 0,
+      optional: true,
+      action: { label: 'Add a goal', onClick: () => setGoalDialog('new'), disabled: !hasCurrency },
+    },
+  ];
+  const showSetup = !setup.prefs.hidden && !setupSteps.every((x) => x.done);
+  const setupGuide = showSetup && (
+    <SetupGuide steps={setupSteps} skipped={setup.prefs.skipped} onSkip={setup.skip} onUnskip={setup.unskip} onHide={setup.hide} />
   );
 
   const sampleBanner = hasSamples(data) && (
@@ -726,6 +752,13 @@ export default function App() {
             <PageHeader title="Settings" subtitle="Appearance, currency, plan and alerts, categories and your data." />
             <SettingsPanel
               onReset={() => navigate('overview')}
+              onExport={() => setDialog('export')}
+              canExport={transactions.length > 0}
+              setupHidden={setup.prefs.hidden}
+              onShowSetup={() => {
+                setup.show();
+                navigate('overview');
+              }}
               data={data}
               setData={setData}
               showInstallHelp={!IS_ARTIFACT}
@@ -743,88 +776,106 @@ export default function App() {
               eyebrow={new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
               title={greeting()}
               subtitle={
-                isEmpty(data)
-                  ? 'Let’s set up your budget.'
+                !hasAnyTransactions
+                  ? 'Let’s set up your budget. It takes a couple of minutes.'
                   : `Here’s where your money stands for ${month === CURRENT_MONTH ? 'this month' : monthLabel(month)}.`
               }
               actions={<>{monthSwitch}{addButton}</>}
             />
-            {welcome}
-            {sampleBanner}
-            {alertBanner}
-            <BalanceHero
-              month={month}
-              isCurrentMonth={month === CURRENT_MONTH}
-              totals={t}
-              previous={prev}
-              plan={plan}
-              hasData={monthTx.length > 0}
-              planHref={hrefFor('plans')}
-            />
-            <QuickActions
-              onExpense={() => setAdding('expense')}
-              onIncome={() => setAdding('income')}
-              onImport={() => setDialog('import')}
-              onGoal={() => setGoalDialog('new')}
-              hasCurrency={!!settings.currency}
-            />
-            <div className="section-grid">
-              <div className="span-6">
-                <BudgetPanel
-                  summary
-                  status={status}
-                  budgets={budgets}
-                  categories={settings.expenseCategories}
-                  onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
-                  action={status.length > 0 && seeAll('budgets')}
-                  onSetUp={() => navigate('budgets')}
-                />
-              </div>
-              <div className="span-6">
-                {settings.currency ? (
-                  <GoalsPanel
-                    summary
-                    goals={goals}
-                    allocations={currentPlan.goals}
-                    emergencyMonthly={currentPlan.emergency}
-                    emergencyMonths={planSettings.emergencyMonths}
-                    onDialog={setGoalDialog}
-                    onDelete={removeGoal}
-                    onAddMoney={addMoneyToGoal}
-                    action={goals.length > 0 && seeAll('savings', 'Manage')}
+            {setupGuide}
+            {!hasAnyTransactions ? (
+              <>
+                {sampleBanner}
+                {!showSetup && (
+                  <QuickActions
+                    onExpense={() => setAdding('expense')}
+                    onIncome={() => setAdding('income')}
+                    onImport={() => setDialog('import')}
+                    onGoal={() => setGoalDialog('new')}
+                    hasCurrency={!!settings.currency}
                   />
-                ) : (
-                  <section className="card">
-                    <div className="card-head"><h2>Savings goals</h2></div>
-                    <EmptyState icon="savings" title="Goals start with a currency" compact>
-                      Choose your base currency in the welcome card, then add a goal.
-                    </EmptyState>
-                  </section>
                 )}
+                <OverviewPreview />
+              </>
+            ) : (
+              <>
+              {sampleBanner}
+              {alertBanner}
+              <BalanceHero
+                month={month}
+                isCurrentMonth={month === CURRENT_MONTH}
+                totals={t}
+                previous={prev}
+                plan={plan}
+                hasData={monthTx.length > 0}
+                planHref={hrefFor('plans')}
+              />
+              <QuickActions
+                onExpense={() => setAdding('expense')}
+                onIncome={() => setAdding('income')}
+                onImport={() => setDialog('import')}
+                onGoal={() => setGoalDialog('new')}
+                hasCurrency={!!settings.currency}
+              />
+              <div className="section-grid">
+                <div className="span-6">
+                  <BudgetPanel
+                    summary
+                    status={status}
+                    budgets={budgets}
+                    categories={settings.expenseCategories}
+                    onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
+                    action={status.length > 0 && seeAll('budgets')}
+                    onSetUp={() => navigate('budgets')}
+                  />
+                </div>
+                <div className="span-6">
+                  {settings.currency ? (
+                    <GoalsPanel
+                      summary
+                      goals={goals}
+                      allocations={currentPlan.goals}
+                      emergencyMonthly={currentPlan.emergency}
+                      emergencyMonths={planSettings.emergencyMonths}
+                      onDialog={setGoalDialog}
+                      onDelete={removeGoal}
+                      onAddMoney={addMoneyToGoal}
+                      action={goals.length > 0 && seeAll('savings', 'Manage')}
+                    />
+                  ) : (
+                    <section className="card">
+                      <div className="card-head"><h2>Savings goals</h2></div>
+                      <EmptyState icon="savings" title="Goals start with a currency" compact>
+                        Choose your base currency in the welcome card, then add a goal.
+                      </EmptyState>
+                    </section>
+                  )}
+                </div>
+                <div className="span-7">{trendCard(isPhone)}</div>
+                <div className="span-5">
+                  <TransactionList
+                    transactions={monthTx}
+                    onDelete={remove}
+                    onEdit={setEditingId}
+                    recent={5}
+                    title="Recent activity"
+                    action={monthTx.length > 0 && seeAll('transactions')}
+                    emptyAction={
+                      <button type="button" className="btn-secondary sm" onClick={() => setAdding('expense')}>
+                        <Icon name="plus" size={16} /> Add transaction
+                      </button>
+                    }
+                  />
+                </div>
+                <div className="span-12">
+                  <InsightsCard
+                    insights={insightList}
+                    action={seeAll('insights', 'More insights')}
+                  />
+                </div>
               </div>
-              <div className="span-7">{trendCard(isPhone)}</div>
-              <div className="span-5">
-                <TransactionList
-                  transactions={monthTx}
-                  onDelete={remove}
-                  onEdit={setEditingId}
-                  recent={5}
-                  title="Recent activity"
-                  action={monthTx.length > 0 && seeAll('transactions')}
-                  emptyAction={
-                    <button type="button" className="btn-secondary sm" onClick={() => setAdding('expense')}>
-                      <Icon name="plus" size={16} /> Add transaction
-                    </button>
-                  }
-                />
-              </div>
-              <div className="span-12">
-                <InsightsCard
-                  insights={insightList}
-                  action={seeAll('insights', 'More insights')}
-                />
-              </div>
-            </div>
+              </>
+            )}
             {/* ---- /Overview ---- */}
           </>
         );

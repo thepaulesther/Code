@@ -1264,3 +1264,43 @@ a { color: var(--accent-text); }
 .stat.lead { background: var(--surface-sage); border-color: color-mix(in srgb, var(--accent) 14%, var(--border)); box-shadow: none; }
 .stat.lead .stat-value { font-size: var(--text-3xl); }
 @media (max-width: 599px) { .stat.lead .stat-value { font-size: var(--text-2xl); } }
+
+/* ---- Round 2: setup guide, data safety ---- */
+.setup { display: flex; flex-direction: column; gap: var(--space-4); }
+.setup .card-head { margin-bottom: 0; }
+.setup-meter .meter-fill { background: var(--income); }
+.setup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.setup-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.setup-step:first-child { border-top: 0; padding-top: 0; }
+.setup-mark {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-sm); font-weight: 650;
+  background: var(--surface-2); color: var(--muted);
+}
+.setup-step.is-current .setup-mark { background: var(--accent); color: var(--accent-ink); }
+.setup-step.is-done .setup-mark { background: color-mix(in srgb, var(--income) 15%, transparent); color: var(--income); }
+.setup-body { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); padding-top: 4px; }
+.setup-line { display: flex; justify-content: space-between; gap: var(--space-2); align-items: baseline; }
+.setup-title { font-weight: 600; }
+.setup-step.is-done .setup-title { color: var(--muted); font-weight: 500; }
+.setup-state { font-size: var(--text-xs); color: var(--muted); font-weight: 600; }
+.setup-step.is-current .setup-state { color: var(--accent-text); }
+.setup-detail { margin: 0; color: var(--muted); font-size: var(--text-sm); max-width: 62ch; }
+.setup-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.setup-later { align-self: flex-start; font-size: var(--text-sm); }
+.setup-body select {
+  max-width: 360px; min-height: var(--control-h);
+  background-color: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 34px 0 var(--space-3);
+  color: var(--text); font-size: var(--text-md); width: 100%; appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378847d' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.setup-body select:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent); }
+.preview-list .insight-icon { color: var(--accent-text); }
+@media (min-width: 900px) { .preview-list { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4) var(--space-8); } }
+
+.data-warning {
+  display: flex; gap: var(--space-2); margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--border));
+  font-size: var(--text-sm); max-width: 70ch;
+}
+.data-warning .icon { color: var(--warn); margin-top: 1px; }
