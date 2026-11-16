@@ -270,7 +270,7 @@ export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, 
           <section className="set-section">
             <h3>Use it like an app</h3>
             <p className="hint">
-              Ledgerly works offline once it has loaded. To put it on your home screen: in Chrome or Edge, use{' '}
+              Elora works offline once it has loaded. To put it on your home screen: in Chrome or Edge, use{' '}
               <strong>Install app</strong> in the top bar or the browser menu. On iPhone or iPad, tap{' '}
               <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>.
             </p>

@@ -12,6 +12,8 @@
     "build:artifact": "tsc -b && vite build --mode artifact"
   },
   "dependencies": {
+    "@fontsource/figtree": "^5.1.1",
+    "@fontsource/sora": "^5.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

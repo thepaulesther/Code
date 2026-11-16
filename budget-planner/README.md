@@ -1,4 +1,4 @@
-# Ledgerly: budget planner
+# Elora: a calm money planner
 
 A small, private budget planner. Track income and expenses, set monthly limits per category, and see where your money goes. All data lives in your browser's `localStorage`; nothing is sent to a server. It installs as an app and works offline.
 

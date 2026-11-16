@@ -1,13 +1,13 @@
 {
-  "name": "Ledgerly",
-  "short_name": "Ledgerly",
-  "description": "A private budget planner. Track spending, set monthly budgets, works offline.",
+  "name": "Elora",
+  "short_name": "Elora",
+  "description": "A calm money planner. See where your money goes, save for what matters, and get warned before you overspend.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f5f1",
-  "theme_color": "#2f5d50",
+  "background_color": "#F4F7F5",
+  "theme_color": "#1D5C58",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },

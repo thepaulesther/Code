@@ -44,6 +44,7 @@ import {
   stopRule,
   useAppData,
 } from './lib/store';
+import { BrandLockup } from './components/BrandLockup';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalsPanel } from './components/GoalsPanel';
 import { PlanCard } from './components/PlanCard';
@@ -58,6 +59,13 @@ import {
 } from './lib/plan';
 
 const CURRENT_MONTH = monthOf(todayISO());
+
+/** "Good morning", "Good afternoon" or "Good evening" by the device's clock. */
+function greeting(hour = new Date().getHours()): string {
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
 type DialogName = 'settings' | 'import' | 'export' | null;
 
@@ -293,11 +301,9 @@ export default function App() {
       <div className="app">
         <header className="topbar">
           <div className="brand">
-            <svg className="logo" viewBox="0 0 32 32" aria-hidden>
-              <circle cx="16" cy="16" r="13" fill="var(--accent)" />
-              <path d="M16 3a13 13 0 0 1 0 26z" fill="var(--income)" />
-            </svg>
-            <h1>Ledgerly</h1>
+            <h1 style={{ margin: 0, lineHeight: 0 }}>
+              <BrandLockup />
+            </h1>
             {!online && <span className="pill offline">Offline</span>}
           </div>
           <div className="month-nav">
@@ -323,6 +329,19 @@ export default function App() {
             <button type="button" className="btn-ghost" onClick={() => setDialog('settings')}>Settings</button>
           </div>
         </header>
+
+        {!isEmpty(data) && settings.currency && (
+          <section className="greeting" aria-label="Summary">
+            <div>
+              <h2>{greeting()}</h2>
+              <p>
+                {month === CURRENT_MONTH
+                  ? `Here’s where ${monthLabel(month).split(' ')[0]} stands.${plan.income > 0 && plan.shortfall === 0 ? ' Bills and savings are already set aside.' : ''}`
+                  : `Here’s how ${monthLabel(month)} went.`}
+              </p>
+            </div>
+          </section>
+        )}
 
         {isEmpty(data) && (
           <section className="welcome" aria-labelledby="welcome-title">

@@ -1,37 +1,45 @@
-/* Ledgerly: calm ledger greens, warm paper neutrals, money-in green / money-out coral. */
+/* Elora: a calm tide, with light on the horizon. Lagoon for trust, dawn gold for savings,
+   blue money-in and orange-red money-out (distinct for colour-blind readers). Tokens mirror the Elora design system. */
 :root {
   color-scheme: light;
-  --bg: #f6f5f1;
-  --surface: #ffffff;
-  --surface-2: #f1efe9;
-  --border: #e5e2da;
-  --text: #1d1c1a;
-  --muted: #6f6b63;
-  --accent: #2f5d50;
-  --accent-ink: #ffffff;
-  --income: #2e8a63;
-  --expense: #c4553f;
-  --warn: #b57d12;
-  --focus: #2f5d50;
-  --backdrop: rgb(20 18 12 / 0.38);
-  --shadow: 0 1px 2px rgb(30 25 15 / 0.04), 0 4px 16px rgb(30 25 15 / 0.04);
-  --shadow-lg: 0 10px 40px rgb(30 25 15 / 0.18);
+  --bg: #F4F7F5;
+  --surface: #FFFFFF;
+  --surface-2: #E7EEEA;
+  --border: #DCE4E0;
+  --border-strong: #7A8E8A;
+  --text: #13262A;
+  --muted: #53676A;
+  --accent: #1D5C58;
+  --accent-strong: #174B48;
+  --accent-ink: #FFFFFF;
+  --tide: #BFE0D9;
+  --dawn: #E8B04B;
+  --dawn-deep: #9E6A0A;
+  --income: #1D6385;
+  --expense: #B4472A;
+  --warn: #875600;
+  --danger: #B03A27;
+  --focus: #1D5C58;
+  --backdrop: rgb(13 25 27 / 0.42);
+  --shadow: 0 1px 2px rgb(19 38 42 / 0.06), 0 8px 24px rgb(19 38 42 / 0.05);
+  --shadow-lg: 0 16px 48px rgb(19 38 42 / 0.18);
+  --cat-0: #8B9A97;
+  --cat-1: #1D5C58;
+  --cat-2: #5B9C8F;
+  --cat-3: #B07A1C;
+  --cat-4: #3E6E9C;
+  --cat-5: #8A9A3B;
+  --cat-6: #B5576A;
+  --cat-7: #7660A8;
+  --cat-8: #C9962E;
+  --cat-9: #2F8A9A;
+  --cat-10: #A8653F;
+  --cat-11: #5C73C4;
+  --cat-12: #7F948D;
 
-  --cat-0: #9a958a;
-  --cat-1: #2f5d50;
-  --cat-2: #5f9e7f;
-  --cat-3: #d08a4b;
-  --cat-4: #4f7ca8;
-  --cat-5: #a7b85a;
-  --cat-6: #c1677a;
-  --cat-7: #8a6fb3;
-  --cat-8: #d9b44a;
-  --cat-9: #3f8f9c;
-  --cat-10: #b0704f;
-  --cat-11: #6b7fd1;
-  --cat-12: #7f9a8f;
-
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Sora', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --font-text: 'Figtree', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  font-family: var(--font-text);
   font-size: 15px;
   line-height: 1.45;
   color: var(--text);
@@ -42,67 +50,79 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #141513;
-    --surface: #1c1d1b;
-    --surface-2: #252623;
-    --border: #2f302d;
-    --text: #ecebe6;
-    --muted: #9b988f;
-    --accent: #7cc4a8;
-    --accent-ink: #10201a;
-    --income: #6ccb9c;
-    --expense: #ee8a74;
-    --warn: #e7b44c;
-    --focus: #7cc4a8;
-    --backdrop: rgb(0 0 0 / 0.55);
-    --shadow: none;
-    --shadow-lg: 0 10px 40px rgb(0 0 0 / 0.5);
-    --cat-0: #8d897f;
-    --cat-1: #7cc4a8;
-    --cat-2: #4f9c7c;
-    --cat-3: #e5a067;
-    --cat-4: #79a6d4;
-    --cat-5: #bccd70;
-    --cat-6: #e08aa0;
-    --cat-7: #ad93d6;
-    --cat-8: #e8c766;
-    --cat-9: #6fc0cc;
-    --cat-10: #d39a78;
-    --cat-11: #97a6ec;
-    --cat-12: #a9bdb4;
+    --bg: #0D191B;
+    --surface: #142427;
+    --surface-2: #1B2E31;
+    --border: #26393C;
+    --border-strong: #6B8582;
+    --text: #E6EFEC;
+    --muted: #9DB1AE;
+    --accent: #6FC1B6;
+    --accent-strong: #8AD0C6;
+    --accent-ink: #0B1E1D;
+    --tide: #24504B;
+    --dawn: #F0C26A;
+    --dawn-deep: #F0C26A;
+    --income: #7FC4E8;
+    --expense: #F2946F;
+    --warn: #F0C26A;
+    --danger: #F28B74;
+    --focus: #8FD8CC;
+    --backdrop: rgb(0 0 0 / 0.6);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.6);
+    --cat-0: #7E8E8B;
+    --cat-1: #6FC1B6;
+    --cat-2: #4F9C8F;
+    --cat-3: #E0A84A;
+    --cat-4: #7FAAD8;
+    --cat-5: #B8C46A;
+    --cat-6: #E08A9C;
+    --cat-7: #A894DB;
+    --cat-8: #F0C26A;
+    --cat-9: #6CC3D0;
+    --cat-10: #D69A76;
+    --cat-11: #9AA9EE;
+    --cat-12: #A9BDB4;
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #141513;
-  --surface: #1c1d1b;
-  --surface-2: #252623;
-  --border: #2f302d;
-  --text: #ecebe6;
-  --muted: #9b988f;
-  --accent: #7cc4a8;
-  --accent-ink: #10201a;
-  --income: #6ccb9c;
-  --expense: #ee8a74;
-  --warn: #e7b44c;
-  --focus: #7cc4a8;
-  --backdrop: rgb(0 0 0 / 0.55);
-  --shadow: none;
-  --shadow-lg: 0 10px 40px rgb(0 0 0 / 0.5);
-  --cat-0: #8d897f;
-  --cat-1: #7cc4a8;
-  --cat-2: #4f9c7c;
-  --cat-3: #e5a067;
-  --cat-4: #79a6d4;
-  --cat-5: #bccd70;
-  --cat-6: #e08aa0;
-  --cat-7: #ad93d6;
-  --cat-8: #e8c766;
-  --cat-9: #6fc0cc;
-  --cat-10: #d39a78;
-  --cat-11: #97a6ec;
-  --cat-12: #a9bdb4;
+  --bg: #0D191B;
+  --surface: #142427;
+  --surface-2: #1B2E31;
+  --border: #26393C;
+  --border-strong: #6B8582;
+  --text: #E6EFEC;
+  --muted: #9DB1AE;
+  --accent: #6FC1B6;
+  --accent-strong: #8AD0C6;
+  --accent-ink: #0B1E1D;
+  --tide: #24504B;
+  --dawn: #F0C26A;
+  --dawn-deep: #F0C26A;
+  --income: #7FC4E8;
+  --expense: #F2946F;
+  --warn: #F0C26A;
+  --danger: #F28B74;
+  --focus: #8FD8CC;
+  --backdrop: rgb(0 0 0 / 0.6);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.6);
+  --cat-0: #7E8E8B;
+  --cat-1: #6FC1B6;
+  --cat-2: #4F9C8F;
+  --cat-3: #E0A84A;
+  --cat-4: #7FAAD8;
+  --cat-5: #B8C46A;
+  --cat-6: #E08A9C;
+  --cat-7: #A894DB;
+  --cat-8: #F0C26A;
+  --cat-9: #6CC3D0;
+  --cat-10: #D69A76;
+  --cat-11: #9AA9EE;
+  --cat-12: #A9BDB4;
 }
 
 * { box-sizing: border-box; }
@@ -139,7 +159,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* Buttons */
 .icon-btn {
   width: 32px; height: 32px; display: grid; place-items: center; flex: none;
-  border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+  border: 1px solid var(--border-strong); background: var(--surface); border-radius: 8px;
   cursor: pointer; font-size: 18px; line-height: 1; color: var(--muted);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface-2); }
@@ -269,7 +289,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .field em { font-style: normal; opacity: 0.7; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field input, .field select, .list-tools input, .money-input, .cat-add input, .cat-edit input {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
   padding: 9px 10px; color: var(--text); font-size: 14px; width: 100%; min-width: 0;
 }
 .field input:focus, .field select:focus, .list-tools input:focus, .cat-add input:focus, .cat-edit input:focus, .csv-box:focus {
@@ -292,7 +312,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .list-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .list-tools input { flex: 1 1 200px; }
 .chips { display: flex; gap: 4px; }
-.chip { border: 1px solid var(--border); background: transparent; border-radius: 99px; padding: 5px 12px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.chip { border: 1px solid var(--border-strong); background: transparent; border-radius: 99px; padding: 5px 12px; cursor: pointer; font-size: 13px; color: var(--muted); }
 .chip.is-on { background: var(--text); color: var(--bg); border-color: var(--text); }
 .rows, .rec-rows { list-style: none; margin: 0; padding: 0; }
 .rows li, .rec-rows li {
@@ -325,12 +345,12 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .amount-row { display: flex; gap: 6px; min-width: 0; }
 .amount-row .money-input { flex: 1; }
 .amount-row .cur-compact {
-  flex: none; width: 84px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  flex: none; width: 84px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
   padding: 0 8px; font-size: 14px; font-weight: 600; color: var(--text);
 }
 .cur-compact:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .set-section select#set-currency, .import-opts select#opt-currency {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 10px; font-size: 14px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 9px 10px; font-size: 14px;
 }
 .import-opts select#opt-currency { padding: 6px 8px; max-width: 240px; }
 .convert-box {
@@ -339,7 +359,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 }
 .rate-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 550; flex-wrap: wrap; }
 .rate-row input {
-  width: 120px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  width: 120px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
   padding: 6px 9px; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text);
 }
 .rate-row input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
@@ -365,7 +385,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 .choose-base select {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 14px; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 10px; font-size: 14px; font-weight: 500;
 }
 /* Alerts */
 .alert-banner {
@@ -388,7 +408,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 @keyframes alert-in { from { transform: translateY(-4px); opacity: 0; } }
 
 /* Monthly plan */
-:root { --seg-fixed: var(--cat-4); --seg-goals: var(--cat-7); --seg-emergency: var(--warn); --seg-free: var(--income); }
+:root { --seg-fixed: var(--accent); --seg-goals: var(--dawn-deep); --seg-emergency: var(--tide); --seg-free: var(--income); }
 .seg-fixed { background: var(--seg-fixed); }
 .seg-goals { background: var(--seg-goals); }
 .seg-emergency { background: var(--seg-emergency); }
@@ -435,7 +455,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .goal-actions, .goal-money { display: flex; gap: 2px; align-items: center; flex-wrap: wrap; margin: 4px 0 0 -10px; }
 .goal-money { margin-left: 0; gap: 6px; }
 .goal-money input {
-  width: 140px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 14px;
+  width: 140px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 9px; font-size: 14px;
 }
 .goal-money input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .goal-money .error { flex-basis: 100%; }
@@ -448,7 +468,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 }
 .share-pct { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 550; }
 .share-pct input {
-  width: 72px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+  width: 72px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 9px;
   font-size: 15px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums;
 }
 .share-pct input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
@@ -464,7 +484,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .welcome ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; max-width: 75ch; }
 .welcome li > span { margin-right: 8px; }
 .welcome select {
-  margin-top: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  margin-top: 4px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
   padding: 6px 8px; font-size: 14px; max-width: 100%;
 }
 .badge.example { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
@@ -587,4 +607,30 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   .month-name { min-width: 130px; }
   .stat-value { font-size: 22px; }
   .modal-inner { padding: 16px; }
+}
+
+/* ---- Elora type and brand details ---- */
+.brand-lockup { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.brand-lockup .mark { width: 32px; height: 32px; flex: none; }
+.brand-lockup .wordmark { height: 22px; width: auto; fill: currentColor; }
+.greeting { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
+.greeting h2 { margin: 0; font: 600 28px/34px var(--font-display); letter-spacing: -0.015em; text-wrap: balance; }
+.greeting p { margin: 4px 0 0; color: var(--muted); }
+.month-name, .card-head h2, .modal-head h2, .welcome h2 { font-family: var(--font-display); letter-spacing: -0.005em; }
+.card-head h2 { font-size: 17px; font-weight: 600; }
+.stat-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; font-weight: 700; }
+.stat-value, .plan-amt, .plan-income strong, .legend-amt, .row-amt, .goal-nums, .budget-nums, .donut-value, .convert-result strong {
+  font-family: var(--font-display); font-variant-numeric: tabular-nums;
+}
+.stat-value { font-weight: 600; }
+.btn-primary:hover:not(:disabled) { filter: none; background: var(--accent-strong); }
+.btn-danger { background: var(--danger); }
+.goal-name .badge { color: var(--warn); background: color-mix(in srgb, var(--dawn) 22%, transparent); }
+@media (max-width: 680px) { .greeting h2 { font-size: 24px; line-height: 30px; } }
+/* Phones: figures scale down instead of breaking mid-number; long transaction names wrap instead of being cut off. */
+@media (max-width: 680px) {
+  .stat-value { font-size: clamp(16px, 4.6vw, 22px); line-height: 1.25; overflow-wrap: normal; white-space: nowrap; }
+  .stat { padding: 12px 14px; }
+  .rows .row-title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .rows .row-amt { font-size: 14px; }
 }
