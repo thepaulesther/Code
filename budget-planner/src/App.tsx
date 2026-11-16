@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BudgetPanel } from './components/BudgetPanel';
 import { SpendingDonut, TrendChart } from './components/Charts';
 import { ExportDialog } from './components/ExportDialog';
@@ -64,7 +64,11 @@ import {
 } from './lib/plan';
 import { hrefFor, navigate, useRoute, type Route } from './lib/route';
 import { changeLabel, compareMonths } from './lib/compare';
-import { upcomingThisMonth } from './lib/reconcile';
+import { upcoming as upcomingFor } from './lib/upcoming';
+import { checkInFor, monthEndCheckIn, saveLeftOver, type Split } from './lib/monthEnd';
+import { arrangeRows, useLayoutPrefs, type SectionId } from './lib/layout';
+import { MonthEndCard } from './components/overview/MonthEndCard';
+import { CustomiseOverview } from './components/overview/CustomiseOverview';
 import { ComingUp } from './components/overview/ComingUp';
 import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -138,6 +142,12 @@ export default function App({ initial, notice }: {
   const [dialog, setDialog] = useState<DialogName>(null);
   const route = useRoute();
   const [adding, setAdding] = useState<TxType | null>(null);
+  // "Add a repeating bill" opens the form already set to repeat monthly.
+  const [addingRepeat, setAddingRepeat] = useState(false);
+  const openAdd = (type: TxType | null, repeat = false) => {
+    setAddingRepeat(repeat);
+    setAdding(type);
+  };
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(notice ? { text: notice } : null);
@@ -192,8 +202,8 @@ export default function App({ initial, notice }: {
     });
   const plan = planFor(month);
   const currentPlan = month === CURRENT_MONTH ? plan : planFor(CURRENT_MONTH);
-  // Repeating items still due later this month: added automatically on the day.
-  const upcoming = upcomingThisMonth(recurring, today, rateFor);
+  // Repeating items still to come (this month, and early next month near its end): added automatically on the day.
+  const coming = upcomingFor(recurring, transactions, today, { rateFor });
   // If the month rolls over while the app is open on "this month", follow it to the new month.
   const shownCurrent = useRef(CURRENT_MONTH);
   useEffect(() => {
@@ -648,6 +658,82 @@ export default function App({ initial, notice }: {
     />
   );
 
+  // ---- Overview layout and the month-end check-in ----
+  const layout = useLayoutPrefs();
+  const [customising, setCustomising] = useState(false);
+  // Last month's check-in during the first days of a month; any past month's when looking back at it.
+  const checkIn =
+    month === CURRENT_MONTH
+      ? monthEndCheckIn(transactions, goals, today, layout.prefs.dismissedMonthEnd)
+      : month < CURRENT_MONTH
+        ? checkInFor(transactions, goals, month)
+        : null;
+  const saveMonthLeftOver = (fromMonth: string, splits: Split[]) => {
+    const before = data;
+    setData((d) => ({ ...d, goals: saveLeftOver(d.goals ?? [], fromMonth, splits) }));
+    const total = splits.reduce((s, x) => s + x.amount, 0);
+    const names = splits.map((x) => goals.find((g) => g.id === x.goalId)?.name ?? 'a goal');
+    setToast(
+      `Added ${money(total)} left over from ${monthLabel(fromMonth)} to ${names.length === 1 ? `“${names[0]}”` : `${names.length} goals`}.`,
+      () => setData(before),
+    );
+  };
+  const overviewSections: Record<SectionId, ReactNode> = {
+    upcoming:
+      month === CURRENT_MONTH && settings.currency ? (
+        <ComingUp upcoming={coming} today={today} onAddRepeating={() => openAdd('expense', true)} manageHref={hrefFor('transactions')} />
+      ) : null,
+    budgets: (
+      <BudgetPanel
+        summary
+        status={status}
+        budgets={budgets}
+        categories={settings.expenseCategories}
+        onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
+        action={status.length > 0 && seeAll('budgets')}
+        onSetUp={() => navigate('budgets')}
+      />
+    ),
+    goals: settings.currency ? (
+      <GoalsPanel
+        summary
+        goals={goals}
+        allocations={currentPlan.goals}
+        emergencyMonthly={currentPlan.emergency}
+        emergencyMonths={planSettings.emergencyMonths}
+        onDialog={setGoalDialog}
+        onDelete={removeGoal}
+        onAddMoney={addMoneyToGoal}
+        action={goals.length > 0 && seeAll('savings', 'Manage')}
+      />
+    ) : (
+      <section className="card">
+        <div className="card-head"><h2>Savings goals</h2></div>
+        <EmptyState icon="savings" title="Goals start with a currency" compact>
+          Choose your base currency in the welcome card, then add a goal.
+        </EmptyState>
+      </section>
+    ),
+    trend: trendCard(isPhone),
+    activity: (
+      <TransactionList
+        transactions={monthTx}
+        onDelete={remove}
+        onEdit={setEditingId}
+        recent={5}
+        title="Recent activity"
+        action={monthTx.length > 0 && seeAll('transactions')}
+        emptyAction={
+          <button type="button" className="btn-secondary sm" onClick={() => setAdding('expense')}>
+            <Icon name="plus" size={16} /> Add transaction
+          </button>
+        }
+      />
+    ),
+    insights: <InsightsCard insights={insightList} action={seeAll('insights', 'More insights')} />,
+  };
+  const overviewShown = layout.prefs.order.filter((id) => !layout.prefs.hidden.includes(id) && overviewSections[id] != null);
+
   const page = (() => {
     switch (route) {
       case 'transactions':
@@ -663,7 +749,9 @@ export default function App({ initial, notice }: {
             <div className="section-grid">
               <div className="span-8">{txList}</div>
               <div className="span-4 stack">
-                {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
+                {month === CURRENT_MONTH && (coming.thisMonth.length > 0 || coming.nextMonth.length > 0) && (
+                  <ComingUp upcoming={coming} today={today} />
+                )}
                 {recurringPanel}
                 <p className="fineprint">Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}</p>
               </div>
@@ -802,6 +890,7 @@ export default function App({ initial, notice }: {
             <SettingsPanel
               onReset={() => {
                 setup.reset();
+                layout.reset();
                 navigate('overview');
               }}
               onExport={() => setDialog('export')}
@@ -817,6 +906,7 @@ export default function App({ initial, notice }: {
                 setup.show();
                 navigate('overview');
               }}
+              onCustomiseOverview={() => setCustomising(true)}
               data={data}
               setData={setData}
               showInstallHelp={!IS_ARTIFACT}
@@ -868,6 +958,20 @@ export default function App({ initial, notice }: {
                 hasData={monthTx.length > 0}
                 planHref={hrefFor('plans')}
               />
+              {checkIn && settings.currency && (
+                <MonthEndCard
+                  key={checkIn.result.month}
+                  checkIn={checkIn}
+                  goals={goals}
+                  onSave={(splits) => saveMonthLeftOver(checkIn.result.month, splits)}
+                  onNotNow={month === CURRENT_MONTH ? () => layout.dismissMonthEnd(checkIn.result.month) : undefined}
+                  onNewGoal={() => setGoalDialog('new')}
+                  onSeeMonth={() => {
+                    setMonth(checkIn.result.month);
+                    navigate('transactions');
+                  }}
+                />
+              )}
               <QuickActions
                 onExpense={() => setAdding('expense')}
                 onIncome={() => setAdding('income')}
@@ -876,62 +980,14 @@ export default function App({ initial, notice }: {
                 hasCurrency={!!settings.currency}
               />
               <div className="section-grid">
-                <div className="span-6">
-                  <BudgetPanel
-                    summary
-                    status={status}
-                    budgets={budgets}
-                    categories={settings.expenseCategories}
-                    onChange={(b) => setData((d) => ({ ...d, budgets: b }))}
-                    action={status.length > 0 && seeAll('budgets')}
-                    onSetUp={() => navigate('budgets')}
-                  />
-                </div>
-                <div className="span-6">
-                  {settings.currency ? (
-                    <GoalsPanel
-                      summary
-                      goals={goals}
-                      allocations={currentPlan.goals}
-                      emergencyMonthly={currentPlan.emergency}
-                      emergencyMonths={planSettings.emergencyMonths}
-                      onDialog={setGoalDialog}
-                      onDelete={removeGoal}
-                      onAddMoney={addMoneyToGoal}
-                      action={goals.length > 0 && seeAll('savings', 'Manage')}
-                    />
-                  ) : (
-                    <section className="card">
-                      <div className="card-head"><h2>Savings goals</h2></div>
-                      <EmptyState icon="savings" title="Goals start with a currency" compact>
-                        Choose your base currency in the welcome card, then add a goal.
-                      </EmptyState>
-                    </section>
-                  )}
-                </div>
-                <div className="span-7">{trendCard(isPhone)}</div>
-                <div className="span-5 stack">
-                  {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
-                  <TransactionList
-                    transactions={monthTx}
-                    onDelete={remove}
-                    onEdit={setEditingId}
-                    recent={5}
-                    title="Recent activity"
-                    action={monthTx.length > 0 && seeAll('transactions')}
-                    emptyAction={
-                      <button type="button" className="btn-secondary sm" onClick={() => setAdding('expense')}>
-                        <Icon name="plus" size={16} /> Add transaction
-                      </button>
-                    }
-                  />
-                </div>
-                <div className="span-12">
-                  <InsightsCard
-                    insights={insightList}
-                    action={seeAll('insights', 'More insights')}
-                  />
-                </div>
+                {arrangeRows(overviewShown).map(({ id, span }) => (
+                  <div key={id} className={`span-${span}`}>{overviewSections[id]}</div>
+                ))}
+              </div>
+              <div className="overview-foot">
+                <button type="button" className="btn-ghost sm" onClick={() => setCustomising(true)}>
+                  <Icon name="settings" size={16} /> Customise Overview
+                </button>
               </div>
               </>
             )}
@@ -985,12 +1041,13 @@ export default function App({ initial, notice }: {
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
         />
-        <Modal open={adding != null} onClose={() => setAdding(null)} title="Add transaction">
+        <Modal open={adding != null} onClose={() => openAdd(null)} title="Add transaction">
           {adding && (
             <TransactionForm
-              key={adding}
+              key={`${adding}-${addingRepeat}`}
               bare
               initialType={adding}
+              initialRepeat={addingRepeat ? 1 : 0}
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
               rates={data.rates}
@@ -999,9 +1056,20 @@ export default function App({ initial, notice }: {
               recurring={recurring}
               onAdd={(tx, repeat, opts) => {
                 add(tx, repeat, opts);
-                setAdding(null);
+                openAdd(null);
               }}
               onChooseBase={chooseBase}
+            />
+          )}
+        </Modal>
+        <Modal open={customising} onClose={() => setCustomising(false)} title="Customise Overview">
+          {customising && (
+            <CustomiseOverview
+              prefs={layout.prefs}
+              onMove={layout.move}
+              onHide={layout.setHidden}
+              onReset={layout.resetSections}
+              onDone={() => setCustomising(false)}
             />
           )}
         </Modal>

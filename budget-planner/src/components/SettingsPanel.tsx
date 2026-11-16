@@ -233,7 +233,7 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
 }
 
 /** The Settings page. */
-export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, onCustomiseOverview, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
   /** Called after "Delete all data". */
   onReset: () => void;
   /** Download (or show) a full backup. */
@@ -246,6 +246,8 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
   /** The Overview's setup guide was hidden on this device. */
   setupHidden: boolean;
   onShowSetup: () => void;
+  /** Open the dialog that reorders and hides the Overview's sections. */
+  onCustomiseOverview: () => void;
   data: AppData;
   setData: SetData;
   showInstallHelp: boolean;
@@ -277,6 +279,10 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
               {t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
+        </div>
+        <div className="set-row">
+          <p className="hint">Choose which sections the Overview shows, and their order.</p>
+          <button type="button" className="btn-secondary sm" onClick={onCustomiseOverview}>Customise Overview</button>
         </div>
       </section>
 
