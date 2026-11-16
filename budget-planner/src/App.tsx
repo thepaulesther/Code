@@ -562,7 +562,7 @@ export default function App({ initial, notice }: {
       </div>
       <div className="stat">
         <span className="stat-label">Spending</span>
-        <span className="stat-value num">{money(t.expense)}</span>
+        <span className="stat-value num spending">{money(t.expense)}</span>
         <span className="stat-sub">{delta('expense') ?? ' '}</span>
       </div>
       <div className="stat">

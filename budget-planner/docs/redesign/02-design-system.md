@@ -2,6 +2,22 @@
 
 All tokens live at the top of `src/index.css` as CSS custom properties, with light and dark values. Components use the semantic tokens, never raw hex.
 
+## Styles: Tide (default) and Forest
+
+Elora has two looks, chosen per device in **Settings → Appearance → Style** (browser key `elora.style`, kept out of the financial data and backups). Only the look changes; layout, features and calculations are identical.
+
+| | Tide (default) | Forest |
+| --- | --- | --- |
+| Brand | Lagoon `#1D5C58`, tide tint `#BFE0D9`, mist background `#F4F7F5` | Forest `#173F35`, sage `#A8BBA6`, cream `#F7F5EF` |
+| Money in / out | Blue `#1D6385` / orange-red `#B4472A` in stat tiles and charts (distinct for colour-blind readers) | Green `#2F7A57` / plain text (spending isn't red) |
+| Savings | Dawn gold `#9E6A0A` rings and plan segment | Forest rings |
+| Type | Sora (headings, amounts) and Figtree (text), bundled via `@fontsource` so they work offline; no font host is contacted | The device's system font |
+| Logo | Dawn over the tide on a lagoon tile, outlined lowercase "elora" wordmark; also the app icon | Sage leaf on forest, "Elora" in text |
+
+Tide's tokens are the defaults on `:root`; Forest overrides them under `:root[data-brand='forest']`, with dark-mode blocks that set every token again so no light value leaks into dark mode. Tide's checked ratios: text 14.6:1 and muted 5.5:1 on mist; accent 7.7:1, income 6.6:1, money-out 5.4:1 and savings gold 4.7:1 on white; danger 5.1:1 on the tinted panel. The automated axe-core scan covers every page in both styles, light and dark.
+
+The colour table below describes **Forest**, the original palette.
+
 ## Colour
 
 | Token | Light | Dark | Use |

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { hrefFor, type Route } from '../../lib/route';
-import { BrandMark, Icon, type IconName } from '../ui/Icon';
+import { BrandMark, BrandWordmark, Icon, type IconName } from '../ui/Icon';
 import { Modal } from '../Modal';
 
 interface NavEntry { route: Route; label: string; icon: IconName }
@@ -36,7 +36,7 @@ export function Sidebar({ route, online, onInstall }: { route: Route; online: bo
     <aside className="sidebar" aria-label="Main">
       <a href={hrefFor('overview')} className="brand" aria-label="Elora, go to overview">
         <BrandMark />
-        <span className="brand-name">Elora</span>
+        <BrandWordmark />
       </a>
       <nav className="nav" aria-label="Sections">
         <ul className="nav-group" aria-label="Money">
@@ -72,7 +72,7 @@ export function MobileTopBar({ online }: { online: boolean }) {
     <header className="topbar-mobile">
       <a href={hrefFor('overview')} className="brand" aria-label="Elora, go to overview">
         <BrandMark />
-        <span className="brand-name">Elora</span>
+        <BrandWordmark />
       </a>
       <div className="topbar-actions">
         {!online && <span className="pill offline">Offline</span>}

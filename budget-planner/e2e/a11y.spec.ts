@@ -13,16 +13,19 @@ const check = async (page: import('@playwright/test').Page) => {
 };
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`every page meets WCAG 2.2 AA (${theme})`, async ({ page, seed }) => {
-    await seed({ ...sampleData(), settings: { ...sampleData().settings, theme } });
-    const found: string[] = [];
-    for (const path of PAGES) {
-      await page.goto(path);
-      await expect(page.locator('#page-title')).toBeVisible();
-      found.push(...(await check(page)).map((v) => `${path}: ${v}`));
-    }
-    expect(found).toEqual([]);
-  });
+  for (const style of ['tide', 'forest'] as const) {
+    test(`every page meets WCAG 2.2 AA (${style}, ${theme})`, async ({ page, seed }) => {
+      await seed({ ...sampleData(), settings: { ...sampleData().settings, theme } });
+      if (style === 'forest') await page.addInitScript(() => localStorage.setItem('elora.style', '"forest"'));
+      const found: string[] = [];
+      for (const path of PAGES) {
+        await page.goto(path);
+        await expect(page.locator('#page-title')).toBeVisible();
+        found.push(...(await check(page)).map((v) => `${path}: ${v}`));
+      }
+      expect(found).toEqual([]);
+    });
+  }
 
   test(`new user, add sheet and restore dialog meet WCAG 2.2 AA (${theme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });

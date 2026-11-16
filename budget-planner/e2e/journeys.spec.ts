@@ -242,3 +242,28 @@ test('repeating bills: upcoming ones are shown, added on their day, and the bala
   await expect(page.locator('.rows li', { hasText: 'Salary' })).toBeVisible();
   await expect(page.locator('.rows li', { hasText: 'Rent' })).toBeVisible();
 });
+
+test('style: Tide by default, Forest from Settings, remembered on this device and kept out of the data', async ({ page, seed }) => {
+  await seed(sampleData());
+  await page.goto('/#/settings');
+  const html = page.locator('html');
+  await expect(html).not.toHaveAttribute('data-brand', /.*/);
+  const brand = isPhone(page) ? page.locator('.topbar-mobile .brand') : page.locator('.sidebar .brand');
+  await expect(brand.locator('.mark-tide')).toBeVisible();
+  await expect(brand.locator('.wordmark')).toBeVisible();
+  const before = JSON.stringify(await stored(page));
+
+  await page.getByRole('radio', { name: 'Forest' }).click();
+  await expect(html).toHaveAttribute('data-brand', 'forest');
+  await expect(brand.locator('.mark-forest')).toBeVisible();
+  await expect(brand.locator('.brand-text')).toHaveText('Elora');
+  await expect(brand.locator('.wordmark')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('elora.style'))).toBe('"forest"');
+  expect(JSON.stringify(await stored(page))).toBe(before);
+
+  await page.reload();
+  await expect(html).toHaveAttribute('data-brand', 'forest');
+  await expect(page.getByRole('radio', { name: 'Forest' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: 'Tide' }).click();
+  await expect(html).not.toHaveAttribute('data-brand', /.*/);
+});
