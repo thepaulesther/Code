@@ -397,6 +397,11 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
           </button>
         )}
       </section>
+
+      <p className="hint build-stamp">
+        Version {__BUILD_COMMIT__} · built{' '}
+        {new Date(__BUILD_DATE__).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+      </p>
     </div>
   );
 }
