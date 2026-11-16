@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fileDate, downloadText } from '../lib/download';
 import { IS_ARTIFACT } from '../lib/pwa';
-import { BrandMark, Icon } from './ui/Icon';
+import { BrandMark, BrandWordmark, Icon } from './ui/Icon';
 
 /**
  * Shown instead of the app when the saved data can't be used safely. Nothing here writes to the saved
@@ -27,7 +27,7 @@ export function RecoveryScreen({ kind, reason, raw, onStartFresh }: {
   return (
     <main className="recovery" aria-labelledby="recovery-title">
       <div className="recovery-card">
-        <div className="brand"><BrandMark /><span className="brand-name">Elora</span></div>
+        <div className="brand"><BrandMark /><BrandWordmark /></div>
         <span className="recovery-icon"><Icon name="alert" size={24} /></span>
         <h1 id="recovery-title" tabIndex={-1}>
           {kind === 'newer' ? 'Your data was saved by a newer version of Elora' : 'Elora couldn’t open your saved data'}

@@ -1,6 +1,5 @@
-import { monthOf, round2 } from './budget';
+import { round2 } from './budget';
 import type { Plan } from './plan';
-import { nextOccurrence, ruleBaseAmount, type RecurringRule } from './recurring';
 
 /**
  * How "Balance this month" (what has happened) becomes the plan's "Left to spend" (what the month
@@ -33,26 +32,5 @@ export function reconcile(plan: Plan): Reconciliation {
   };
 }
 
-export interface UpcomingItem {
-  rule: RecurringRule;
-  date: string;
-  /** One payment in the base currency (at the latest rate for foreign-currency items). */
-  amount: number;
-}
-
-/**
- * Repeating items still due later this month: they're added automatically on their date, and until
- * then they aren't in the transaction list or the balance.
- */
-export function upcomingThisMonth(
-  rules: RecurringRule[],
-  today: string,
-  rateFor?: (currency: string) => number | null,
-): UpcomingItem[] {
-  const month = monthOf(today);
-  return rules
-    .map((rule) => ({ rule, date: nextOccurrence(rule, today) }))
-    .filter((x): x is { rule: RecurringRule; date: string } => !!x.date && x.date > today && monthOf(x.date) === month)
-    .map(({ rule, date }) => ({ rule, date, amount: ruleBaseAmount(rule, rateFor) }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
+// Upcoming repeating items moved to ./upcoming; re-exported for existing callers.
+export { upcomingThisMonth, type UpcomingItem } from './upcoming';

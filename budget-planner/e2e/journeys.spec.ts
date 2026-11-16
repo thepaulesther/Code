@@ -242,3 +242,11 @@ test('repeating bills: upcoming ones are shown, added on their day, and the bala
   await expect(page.locator('.rows li', { hasText: 'Salary' })).toBeVisible();
   await expect(page.locator('.rows li', { hasText: 'Rent' })).toBeVisible();
 });
+
+test('the brand: dawn-over-tide mark and the "elora" wordmark, with a readable name', async ({ page, seed }) => {
+  await seed(sampleData());
+  await page.goto('/');
+  const brand = isPhone(page) ? page.locator('.topbar-mobile .brand') : page.locator('.sidebar .brand');
+  await expect(brand.locator('.brand-mark')).toBeVisible();
+  await expect(brand.getByRole('img', { name: 'Elora' })).toBeVisible();
+});

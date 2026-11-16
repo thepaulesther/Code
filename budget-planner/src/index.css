@@ -1,16 +1,20 @@
 /*
  * Elora design system
  * ---------------------------------------------------------------------------
- * Forest green, sage and cream. Calm, premium, readable.
+ * Forest green, sage and cream, with dawn gold: calm, premium, readable. One look that combines the original
+ * Forest palette with the Tide brand (commit efd4f4f): its dawn-over-tide mark and lowercase wordmark, Sora and
+ * Figtree type, dawn gold for savings, and blue money-in / orange-red money-out, distinct for colour-blind readers.
  *
  * Colour semantics
- *   --accent (forest)  brand, primary actions, active navigation
- *   --income (green)   money in
- *   --text             normal spending (spending is not an error, so it isn't red)
+ *   --accent (forest)      brand, primary actions, active navigation
+ *   --income (blue)        money in
+ *   --money-out (orange)   spending totals in stat tiles and charts; list rows stay in plain --text
+ *   --savings (dawn gold)  goal progress and the plan's savings segment
  *   --danger           over budget, over plan, destructive actions only
  *   --warn (ochre)     approaching a limit
  *
- * Contrast (checked, WCAG 2.2): --text 12:1, --muted 5.1:1 on cream, --accent 11.7:1 on white,
+ * Contrast (checked, WCAG 2.2): --text 12:1, --muted 5.1:1 on cream, --accent 11.7:1, --income 6.6:1,
+ * --money-out 5.4:1 and --savings 4.7:1 on white,
  * --danger 5:1 on the tinted panel (#F0EDE4).
  * The brief's #78847D is 3.6:1 on cream, so it is --subtle (icons, placeholders), never body text.
  * Sage #A8BBA6 is decorative on light surfaces (2:1) and only used as text on forest (5.7:1).
@@ -40,6 +44,8 @@
   --ink-900: #24332e;
   --ink-600: #5f6b64;
   --ink-500: #78847d;
+  --dawn: #e8b04b;
+  --dawn-deep: #9e6a0a;
 
   /* ---- Semantic colour ---- */
   --bg: var(--cream-100);
@@ -56,7 +62,9 @@
   --accent-ink: var(--white);
   --accent-soft: var(--sage-100);
   --accent-text: var(--forest-800);
-  --income: #2f7a57;
+  --income: #1d6385;
+  --money-out: #b4472a;
+  --savings: var(--dawn-deep);
   --expense: var(--text);
   --danger: #a8472f;
   --warn: #8f6410;
@@ -70,8 +78,8 @@
   --hero-line: rgb(168 187 166 / 0.22);
 
   /* Charts */
-  --chart-income: var(--forest-800);
-  --chart-expense: #c0704f;
+  --chart-income: #1d6385;
+  --chart-expense: #b4472a;
   --chart-grid: var(--border);
 
   /* Categories: earthy, distinguishable, each ≥3:1 on white */
@@ -90,7 +98,8 @@
   --cat-12: #5f7f68;
 
   /* ---- Typography ---- */
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Sora', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --text-xs: 12px;
   --text-sm: 13px;
@@ -166,15 +175,18 @@
     --accent-ink: #102f29;
     --accent-soft: #1f302a;
     --accent-text: #b7d0bc;
-    --income: #7cc9a0;
+    --income: #7fc4e8;
+    --money-out: #f2946f;
+    --savings: #f0c26a;
+    --dawn-deep: #f0c26a;
     --danger: #ee8f76;
     --warn: #e3b45a;
     --focus: #a8c4ae;
     --backdrop: rgb(0 0 0 / 0.6);
     --hero-bg: #173f35;
     --hero-line: rgb(168 187 166 / 0.2);
-    --chart-income: #8fbf9f;
-    --chart-expense: #d89577;
+    --chart-income: #7fc4e8;
+    --chart-expense: #f2946f;
     --shadow-xs: none;
     --shadow-sm: none;
     --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
@@ -211,15 +223,18 @@
   --accent-ink: #102f29;
   --accent-soft: #1f302a;
   --accent-text: #b7d0bc;
-  --income: #7cc9a0;
+  --income: #7fc4e8;
+  --money-out: #f2946f;
+  --savings: #f0c26a;
+  --dawn-deep: #f0c26a;
   --danger: #ee8f76;
   --warn: #e3b45a;
   --focus: #a8c4ae;
   --backdrop: rgb(0 0 0 / 0.6);
   --hero-bg: #173f35;
   --hero-line: rgb(168 187 166 / 0.2);
-  --chart-income: #8fbf9f;
-  --chart-expense: #d89577;
+  --chart-income: #7fc4e8;
+  --chart-expense: #f2946f;
   --shadow-xs: none;
   --shadow-sm: none;
   --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
@@ -246,7 +261,8 @@
 html { scroll-padding-top: 72px; }
 body { margin: 0; min-height: 100vh; min-height: 100dvh; background: var(--bg); color: var(--text); overflow-x: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
-h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); letter-spacing: -0.01em; }
+.hero-value, .stat-value { font-family: var(--font-display); }
 p { text-wrap: pretty; }
 a { color: var(--accent-text); }
 .num { font-variant-numeric: tabular-nums; }
@@ -276,6 +292,7 @@ a { color: var(--accent-text); }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; min-width: 0; }
 .brand-mark { width: 30px; height: 30px; flex: none; }
 .brand-name { font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.03em; }
+.wordmark { display: block; height: 22px; width: auto; fill: currentColor; flex: none; }
 
 /* Sidebar */
 .sidebar {
@@ -479,7 +496,7 @@ a { color: var(--accent-text); }
   pointer-events: none;
 }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); position: relative; z-index: 1; }
-.hero-label { font-size: var(--text-base); color: var(--hero-muted); font-weight: 500; }
+.hero-label { font-size: var(--text-xs); color: var(--hero-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 .hero-value {
   display: block; font-size: var(--text-hero); font-weight: 700; letter-spacing: -0.035em; line-height: 1.1;
   margin-top: var(--space-2); overflow-wrap: anywhere;
@@ -551,7 +568,8 @@ a { color: var(--accent-text); }
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow-sm); min-width: 0;
 }
-.stat-label { color: var(--muted); font-size: var(--text-sm); font-weight: 500; }
+.stat-label { color: var(--muted); font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.stat-value.spending { color: var(--money-out); }
 .stat-value { font-size: var(--text-2xl); font-weight: 700; letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; }
 .stat-value.income { color: var(--income); }
 .stat-value.danger { color: var(--danger); }
@@ -815,7 +833,7 @@ a { color: var(--accent-text); }
 /* =========================================================================
    Monthly plan
    ========================================================================= */
-:root { --seg-fixed: var(--cat-4); --seg-goals: var(--cat-7); --seg-emergency: var(--cat-8); --seg-free: var(--income); }
+:root { --seg-fixed: var(--cat-4); --seg-goals: var(--savings); --seg-emergency: var(--cat-9); --seg-free: var(--income); }
 .seg-fixed { background: var(--seg-fixed); }
 .seg-goals { background: var(--seg-goals); }
 .seg-emergency { background: var(--seg-emergency); }
@@ -882,7 +900,7 @@ a { color: var(--accent-text); }
 .ring { position: relative; display: inline-grid; place-items: center; flex: none; }
 .ring svg { position: absolute; inset: 0; }
 .ring-track { stroke: var(--surface-2); }
-.ring-fill { stroke: var(--accent); transition: stroke-dasharray 0.5s var(--ease); }
+.ring-fill { stroke: var(--savings); transition: stroke-dasharray 0.5s var(--ease); }
 .ring.is-done .ring-fill { stroke: var(--income); }
 .ring-text { font-size: 12px; font-weight: 700; color: var(--text); }
 .goal-rows > li:first-child { border-top: 0; padding-top: 0; }
@@ -1085,6 +1103,7 @@ a { color: var(--accent-text); }
   }
   .topbar-mobile .brand-mark { width: 28px; height: 28px; }
   .topbar-mobile .brand-name { font-size: var(--text-lg); }
+  .topbar-mobile .wordmark { height: 19px; }
   .topbar-actions { display: flex; align-items: center; gap: var(--space-2); }
   .topbar-actions .icon-btn { width: var(--tap); height: var(--tap); border-radius: var(--radius-md); }
 
@@ -1356,3 +1375,58 @@ a { color: var(--accent-text); }
 .plan-bridge .plan-bridge-total { border-top: 2px solid var(--border-strong); font-weight: 700; }
 .plan-bridge .plan-bridge-total dd { font-size: var(--text-md); font-weight: 700; }
 .coming-up .hint { margin-top: var(--space-2); }
+
+/* ---- Overview: coming up (Stage 1) ---- */
+.coming-up-group + .coming-up-group, .coming-up-none + .coming-up-group { margin-top: var(--space-3); }
+.group-label {
+  margin: 0 0 var(--space-1); font-size: var(--text-xs); font-weight: 650; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.coming-up-none { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.coming-up-none .icon { color: var(--income); }
+.coming-up-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.coming-up-empty p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.tx-avatar.done { --cat: var(--income); }
+
+/* ---- Overview: month-end check-in ---- */
+.month-end { display: flex; gap: var(--space-4); align-items: flex-start; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.month-end.over { border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.month-end-icon {
+  width: 40px; height: 40px; flex: none; border-radius: var(--radius-md); display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-text);
+}
+.month-end.over .month-end-icon { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
+.month-end-body { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; flex: 1; }
+.month-end-body h2 { margin: 0; font-size: var(--text-md); font-weight: 650; }
+.month-end-body > p { margin: 0; color: var(--muted); }
+.month-end-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+.month-end-form { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
+.month-end-form .hint, .month-end-form .error { margin: 0; }
+.month-end-goals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.month-end-goals li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) 0; border-top: 1px solid var(--border);
+}
+.month-end-goals li:first-child { border-top: 0; }
+.month-end-goals label { display: flex; flex-direction: column; min-width: 0; }
+
+/* ---- Overview: customise ---- */
+.overview-foot { display: flex; justify-content: center; margin-top: var(--space-5); }
+.customise { display: flex; flex-direction: column; gap: var(--space-3); }
+.customise .hint { margin: 0; }
+.customise-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.customise-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3); border-top: 1px solid var(--border);
+}
+.customise-list li:first-child { border-top: 0; }
+.customise-list li.is-hidden .check span { color: var(--muted); }
+.customise-moves { display: flex; gap: var(--space-1); }
+.icon.rot-up { transform: rotate(90deg); }
+.icon.rot-down { transform: rotate(-90deg); }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-3); }
+.set-row .hint { margin: 0; }
+@media (max-width: 599px) {
+  .month-end { flex-direction: column; gap: var(--space-3); }
+  .month-end-actions .btn-primary.sm, .month-end-actions .btn-secondary.sm { flex: 1; min-height: var(--control-h); }
+}
