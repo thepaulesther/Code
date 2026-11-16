@@ -184,14 +184,20 @@ export function buildPlan(input: {
 
   // Bills: repeating expenses (monthly equivalent) + this month's share of spread one-offs (e.g. rent paid once).
   const entries = effectiveInMonth(transactions, month);
-  const ruleBills = recurring
-    .filter((r) => !r.paused && r.type === 'expense')
-    .reduce((s, r) => s + ruleMonthlyAmount(r, rateFor), 0);
+  // A repeating item is set aside only from the month it starts (not before its first payment).
+  const activeRules = recurring.filter((r) => !r.paused && r.type === 'expense' && r.startMonth <= month);
+  const ruleBills = activeRules.reduce((s, r) => s + ruleMonthlyAmount(r, rateFor), 0);
   const isBill = (t: Transaction) => !!t.recurringId || (!!t.spread && t.spread > 1);
   const spreadOneOffs = entries
     .filter((t) => t.type === 'expense' && !t.recurringId && t.spread && t.spread > 1)
     .reduce((s, t) => s + t.amount, 0);
-  const fixed = round2(ruleBills + spreadOneOffs);
+  // A payment made this month by a repeating item that has since been paused (or is no longer set
+  // up) is still a bill: count what was actually paid, so it isn't missing from both bills and spending.
+  const reserved = new Set(activeRules.map((r) => r.id));
+  const paidUnreserved = entries
+    .filter((t) => t.type === 'expense' && !!t.recurringId && !reserved.has(t.recurringId))
+    .reduce((s, t) => s + t.amount, 0);
+  const fixed = round2(ruleBills + spreadOneOffs + paidUnreserved);
 
   // Goals: dated ones need a set amount; undated ones share what's left of the savings slice.
   const purchase = goals.filter((g) => g.kind === 'goal');

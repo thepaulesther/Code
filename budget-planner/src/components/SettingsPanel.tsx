@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { currencyName, formatMoney, shortDate, type TxType } from '../lib/budget';
 import { conversionRate, parseRate, rateForInput, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
@@ -10,15 +10,25 @@ import {
   categoryNameError,
   changeBaseCurrency,
   deleteCategory,
+  deleteSnapshot,
   emptyData,
+  listSnapshots,
+  readSnapshot,
+  takeSnapshot,
   renameCategory,
   type AppData,
   type Theme,
 } from '../lib/store';
 import { CurrencySelect, RateField } from './CurrencyFields';
-import { Modal } from './Modal';
+import { Icon } from './ui/Icon';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
+
+const SNAPSHOT_REASONS: Record<string, string> = {
+  restore: 'Before a restore',
+  reset: 'Before deleting everything',
+  v1: 'Before upgrading old data',
+};
 
 function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
   const plan = planSettingsOf(data.settings);
@@ -97,7 +107,7 @@ function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
           </small>
         </span>
       </label>
-      <button type="button" className="btn-ghost" disabled={!alerts.enabled} onClick={() => playAlarm('over-plan')}>
+      <button type="button" className="btn-secondary sm" style={{ alignSelf: 'flex-start' }} disabled={!alerts.enabled} onClick={() => playAlarm('over-plan')}>
         Test the alarm sound
       </button>
     </section>
@@ -222,9 +232,20 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
   );
 }
 
-export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
-  open: boolean;
-  onClose: () => void;
+/** The Settings page. */
+export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+  /** Called after "Delete all data". */
+  onReset: () => void;
+  /** Download (or show) a full backup. */
+  onBackup: () => void;
+  /** Open the restore dialog, optionally with text to check (a safety copy). */
+  onRestore: (text?: string) => void;
+  onDownloadSnapshot: (key: string) => void;
+  onExport: () => void;
+  canExport: boolean;
+  /** The Overview's setup guide was hidden on this device. */
+  setupHidden: boolean;
+  onShowSetup: () => void;
   data: AppData;
   setData: SetData;
   showInstallHelp: boolean;
@@ -233,82 +254,144 @@ export function SettingsDialog({ open, onClose, data, setData, showInstallHelp, 
 }) {
   const { settings, rates } = data;
   const [confirmReset, setConfirmReset] = useState(false);
+  const [snapshots, setSnapshots] = useState(listSnapshots);
+  // Refresh the list when data changes (a restore or delete adds a copy).
+  useEffect(() => setSnapshots(listSnapshots()), [data]);
   const setSettings = (patch: Partial<AppData['settings']>) =>
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
   return (
-    <Modal open={open} onClose={onClose} title="Settings" wide>
-      <div className="settings">
-        <section className="set-section">
-          <h3>Appearance</h3>
-          <div className="segmented three" role="radiogroup" aria-label="Theme">
-            {(['system', 'light', 'dark'] as Theme[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="radio"
-                aria-checked={settings.theme === t}
-                className={settings.theme === t ? 'is-on' : ''}
-                onClick={() => setSettings({ theme: t })}
-              >
-                {t[0].toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <BaseCurrency data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
-
-        <PlanAndAlerts data={data} setData={setData} />
-
-        <div className="set-cols">
-          <CategoryEditor type="expense" title="Expense categories" data={data} setData={setData} />
-          <CategoryEditor type="income" title="Income categories" data={data} setData={setData} />
-        </div>
-
-        {showInstallHelp && (
-          <section className="set-section">
-            <h3>Use it like an app</h3>
-            <p className="hint">
-              Elora works offline once it has loaded. To put it on your home screen: in Chrome or Edge, use{' '}
-              <strong>Install app</strong> in the top bar or the browser menu. On iPhone or iPad, tap{' '}
-              <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>.
-            </p>
-          </section>
-        )}
-
-        <section className="set-section">
-          <h3>Your data</h3>
-          <p className="hint">
-            Everything is stored in this browser only: {data.transactions.length} transactions,{' '}
-            {data.recurring.length} repeating items. Use Export to back it up or move it to another device.
-          </p>
-          {confirmReset ? (
-            <div className="confirm-row" role="alert">
-              <span>Delete all transactions, budgets, goals and repeating items? This can’t be undone.</span>
-              <div className="head-actions">
-                <button type="button" className="btn-ghost" onClick={() => setConfirmReset(false)}>Cancel</button>
-                <button
-                  type="button"
-                  className="btn-danger"
-                  onClick={() => {
-                    setData((d) => emptyData(d.settings));
-                    setConfirmReset(false);
-                    onClose();
-                  }}
-                >
-                  Delete everything
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button type="button" className="btn-ghost danger" onClick={() => setConfirmReset(true)}>
-              Delete all data…
+    <div className="settings">
+      <section className="set-section">
+        <h3>Appearance</h3>
+        <div className="segmented three" role="radiogroup" aria-label="Theme">
+          {(['system', 'light', 'dark'] as Theme[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="radio"
+              aria-checked={settings.theme === t}
+              className={settings.theme === t ? 'is-on' : ''}
+              onClick={() => setSettings({ theme: t })}
+            >
+              {t[0].toUpperCase() + t.slice(1)}
             </button>
-          )}
-        </section>
+          ))}
+        </div>
+      </section>
+
+      <BaseCurrency data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
+
+      <PlanAndAlerts data={data} setData={setData} />
+
+      <div className="set-cols">
+        <CategoryEditor type="expense" title="Expense categories" data={data} setData={setData} />
+        <CategoryEditor type="income" title="Income categories" data={data} setData={setData} />
       </div>
-    </Modal>
+
+      {showInstallHelp && (
+        <section className="set-section">
+          <h3>Use it like an app</h3>
+          <p className="hint">
+            Elora works offline once it has loaded. To put it on your home screen: in Chrome or Edge, use{' '}
+            <strong>Install app</strong> in the sidebar or the browser menu. On iPhone or iPad, tap{' '}
+            <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>.
+          </p>
+        </section>
+      )}
+
+      <section className="set-section">
+        <h3>Your data</h3>
+        <p className="hint">
+          Everything is stored in this browser only: {data.transactions.length} transactions,{' '}
+          {data.recurring.length} repeating items, {(data.goals ?? []).length} goals and{' '}
+          {Object.keys(data.budgets).length} budgets. Nothing is sent to a server.
+        </p>
+        <p className="data-warning">
+          <Icon name="alert" size={16} />
+          <span>
+            <strong>Keep a backup.</strong> Clearing this browser’s site data, browsing privately, or switching to
+            another browser or device means starting without your data. A full backup holds everything (transactions,
+            budgets, goals, repeating items and settings) and can be restored on any device. The CSV export holds
+            transactions only.
+          </span>
+        </p>
+        <p className="hint">
+          Your data is stored unencrypted in this browser. Anyone who can use this browser profile can see it, and so
+          can other scripts running on the same website address. Don’t use Elora on a shared or public computer.
+        </p>
+        <div className="head-actions">
+          <button type="button" className="btn-primary sm" onClick={onBackup}>
+            <Icon name="download" size={16} /> Download full backup
+          </button>
+          <button type="button" className="btn-secondary sm" onClick={() => onRestore()}>
+            <Icon name="import" size={16} /> Restore from backup…
+          </button>
+          <button type="button" className="btn-secondary sm" onClick={onExport} disabled={!canExport}>
+            <Icon name="export" size={16} /> Export transactions (CSV)
+          </button>
+          {setupHidden && (
+            <button type="button" className="btn-ghost sm" onClick={onShowSetup}>Show the setup guide</button>
+          )}
+        </div>
+        {snapshots.length > 0 && (
+          <div className="snapshots">
+            <h4>Safety copies in this browser</h4>
+            <p className="hint">
+              Kept automatically before an upgrade, a restore or deleting everything. The newest three are kept.
+            </p>
+            <ul className="cat-list">
+              {snapshots.map((s) => (
+                <li key={s.key}>
+                  <span className="cat-name">
+                    {SNAPSHOT_REASONS[s.reason] ?? 'Safety copy'} · {new Date(s.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  </span>
+                  <span className="cat-count muted num">{Math.max(1, Math.round(s.bytes / 1024))} KB</span>
+                  <button type="button" className="btn-ghost sm" onClick={() => onDownloadSnapshot(s.key)}>Download</button>
+                  <button type="button" className="btn-ghost sm" onClick={() => onRestore(readSnapshot(s.key) ?? '')}>Restore</button>
+                  <button
+                    type="button"
+                    className="btn-ghost sm danger"
+                    onClick={() => {
+                      deleteSnapshot(s.key);
+                      setSnapshots(listSnapshots());
+                    }}
+                    aria-label={`Delete the safety copy from ${s.at}`}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {confirmReset ? (
+          <div className="confirm-row" role="alert">
+            <span>Delete all transactions, budgets, goals and repeating items? This can’t be undone.</span>
+            <div className="head-actions">
+              <button type="button" className="btn-ghost" onClick={() => setConfirmReset(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={() => {
+                  // Keep a safety copy, so even this can be undone from the list above.
+                  takeSnapshot('reset', JSON.stringify(data));
+                  setData((d) => emptyData(d.settings));
+                  setConfirmReset(false);
+                  onReset();
+                }}
+              >
+                Delete everything
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn-ghost danger" onClick={() => setConfirmReset(true)}>
+            Delete all data…
+          </button>
+        )}
+      </section>
+    </div>
   );
 }
 
