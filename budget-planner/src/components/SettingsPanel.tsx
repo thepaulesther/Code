@@ -21,7 +21,6 @@ import {
 } from '../lib/store';
 import { CurrencySelect, RateField } from './CurrencyFields';
 import { Icon } from './ui/Icon';
-import { STYLES, useStyle } from '../lib/style';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
 
@@ -262,7 +261,6 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
   useEffect(() => setSnapshots(listSnapshots()), [data]);
   const setSettings = (patch: Partial<AppData['settings']>) =>
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
-  const [style, setStyle] = useStyle();
 
   return (
     <div className="settings">
@@ -282,24 +280,6 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
             </button>
           ))}
         </div>
-        <h4 className="set-sub" id="style-label">Style</h4>
-        <div className="segmented" role="radiogroup" aria-labelledby="style-label">
-          {STYLES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="radio"
-              aria-checked={style === s.id}
-              className={style === s.id ? 'is-on' : ''}
-              onClick={() => setStyle(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <p className="hint">
-          Tide: lagoon and dawn gold. Forest: forest green, sage and cream. Only the look changes, on this device.
-        </p>
         <div className="set-row">
           <p className="hint">Choose which sections the Overview shows, and their order.</p>
           <button type="button" className="btn-secondary sm" onClick={onCustomiseOverview}>Customise Overview</button>

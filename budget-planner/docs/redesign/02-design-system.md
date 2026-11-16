@@ -2,21 +2,19 @@
 
 All tokens live at the top of `src/index.css` as CSS custom properties, with light and dark values. Components use the semantic tokens, never raw hex.
 
-## Styles: Tide (default) and Forest
+## One combined look
 
-Elora has two looks, chosen per device in **Settings → Appearance → Style** (browser key `elora.style`, kept out of the financial data and backups). Only the look changes; layout, features and calculations are identical.
+Elora's look combines the original Forest palette with the Tide brand (commit `efd4f4f`):
 
-| | Tide (default) | Forest |
-| --- | --- | --- |
-| Brand | Lagoon `#1D5C58`, tide tint `#BFE0D9`, mist background `#F4F7F5` | Forest `#173F35`, sage `#A8BBA6`, cream `#F7F5EF` |
-| Money in / out | Blue `#1D6385` / orange-red `#B4472A` in stat tiles and charts (distinct for colour-blind readers) | Green `#2F7A57` / plain text (spending isn't red) |
-| Savings | Dawn gold `#9E6A0A` rings and plan segment | Forest rings |
-| Type | Sora (headings, amounts) and Figtree (text), bundled via `@fontsource` so they work offline; no font host is contacted | The device's system font |
-| Logo | Dawn over the tide on a lagoon tile, outlined lowercase "elora" wordmark; also the app icon | Sage leaf on forest, "Elora" in text |
+- **From Forest:** forest `#173F35`, sage `#A8BBA6` and cream `#F7F5EF`, and the forest-filled balance hero.
+- **From Tide:**
+  - the dawn-over-tide mark (redrawn on a forest tile, also the app icon) and the outlined lowercase "elora" wordmark;
+  - Sora for headings and amounts and Figtree for text, bundled via `@fontsource` so they work offline, with no font host contacted;
+  - dawn gold `#9E6A0A` for savings progress and the plan's savings segment;
+  - blue `#1D6385` for money in and orange-red `#B4472A` for spending totals in stat tiles and charts, distinct for colour-blind readers (list rows keep spending in plain text);
+  - uppercase stat labels.
 
-Tide's tokens are the defaults on `:root`; Forest overrides them under `:root[data-brand='forest']`, with dark-mode blocks that set every token again so no light value leaks into dark mode. Tide's checked ratios: text 14.6:1 and muted 5.5:1 on mist; accent 7.7:1, income 6.6:1, money-out 5.4:1 and savings gold 4.7:1 on white; danger 5.1:1 on the tinted panel. The automated axe-core scan covers every page in both styles, light and dark.
-
-The colour table below describes **Forest**, the original palette.
+The table below lists the forest tokens. Where Tide changed a value, the bullets above win: `--income`, `--money-out`, `--savings`, `--chart-income` and `--chart-expense`.
 
 ## Colour
 
@@ -32,7 +30,9 @@ The colour table below describes **Forest**, the original palette.
 | `--subtle` | `#78847D` | `#7F8C85` | Icons, placeholders. **Not for text** (3.6:1 on cream) |
 | `--accent` | `#173F35` forest | `#A8C4AE` sage | Primary buttons, active states |
 | `--hero-bg` | `#173F35` | `#173F35` | The balance hero only |
-| `--income` | `#2F7A57` | `#7CC9A0` | Money in |
+| `--income` | `#1D6385` | `#7FC4E8` | Money in |
+| `--money-out` | `#B4472A` | `#F2946F` | Spending totals in stat tiles and charts |
+| `--savings` | `#9E6A0A` dawn gold | `#F0C26A` | Goal progress, the plan's savings segment |
 | `--danger` | `#A8472F` | `#EE8F76` | Over budget, over plan, destructive actions |
 | `--warn` | `#8F6410` | `#E3B45A` | Approaching a limit |
 | `--cat-1…12` | earthy set | lighter set | Category colours; each ≥3:1 on white |
@@ -47,7 +47,7 @@ Checked ratios: text 12.1:1 on cream; muted 5.1:1 on cream and 4.7:1 on light sa
 
 ## Typography
 
-System UI stack (Inter if installed). Scale: 12, 13, 14, 15 (body), 17, 20, 26, 34 (page title), 44 (hero; 38 on phones). Weights 400–700, tabular numerals (`.num`) for every amount, `-0.02em` tracking on large figures.
+Sora (headings, amounts) and Figtree (text), bundled; system fonts as fallback. Scale: 12, 13, 14, 15 (body), 17, 20, 26, 34 (page title), 44 (hero; 38 on phones). Weights 400–700, tabular numerals (`.num`) for every amount, `-0.02em` tracking on large figures.
 
 ## Spacing, radii, elevation
 

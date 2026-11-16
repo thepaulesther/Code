@@ -9,11 +9,7 @@ import '@fontsource/sora/latin-600.css'
 import '@fontsource/sora/latin-700.css'
 import './index.css'
 import Root from './Root'
-import { applyStyle, readStyle } from './lib/style'
 import { registerServiceWorker } from './lib/pwa'
-
-// The chosen look, before the first paint, so the other one never flashes.
-applyStyle(readStyle())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

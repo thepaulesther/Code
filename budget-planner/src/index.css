@@ -1,21 +1,23 @@
 /*
  * Elora design system
  * ---------------------------------------------------------------------------
- * Lagoon, tide and dawn gold: a calm tide, with light on the horizon.
- * Brand from commit efd4f4f, mapped onto this token system: lagoon brand, dawn gold for savings,
- * blue money-in and orange-red money-out (distinct for colour-blind readers). Sora headings, Figtree text.
+ * Forest green, sage and cream, with dawn gold: calm, premium, readable. One look that combines the original
+ * Forest palette with the Tide brand (commit efd4f4f): its dawn-over-tide mark and lowercase wordmark, Sora and
+ * Figtree type, dawn gold for savings, and blue money-in / orange-red money-out, distinct for colour-blind readers.
  *
  * Colour semantics
- *   --accent (lagoon)     brand, primary actions, active navigation
- *   --income (blue)       money in
- *   --money-out (orange)  spending totals in stat tiles and charts; list rows stay in plain text
- *   --savings (dawn gold) goal progress and the plan's savings segment
- *   --danger              over budget, over plan, destructive actions only
- *   --warn (ochre)        approaching a limit
+ *   --accent (forest)      brand, primary actions, active navigation
+ *   --income (blue)        money in
+ *   --money-out (orange)   spending totals in stat tiles and charts; list rows stay in plain --text
+ *   --savings (dawn gold)  goal progress and the plan's savings segment
+ *   --danger           over budget, over plan, destructive actions only
+ *   --warn (ochre)     approaching a limit
  *
- * Contrast (checked, WCAG 2.2): --text 14.6:1 and --muted 5.5:1 on the mist background, --accent 7.7:1,
- * --income 6.6:1, --money-out 5.4:1 and --savings 4.7:1 on white, --danger 5.1:1 on the tinted panel.
- * --subtle (3.7:1) is for icons and placeholders, never body text. Tide #BFE0D9 is text only on lagoon (5.5:1).
+ * Contrast (checked, WCAG 2.2): --text 12:1, --muted 5.1:1 on cream, --accent 11.7:1, --income 6.6:1,
+ * --money-out 5.4:1 and --savings 4.7:1 on white,
+ * --danger 5:1 on the tinted panel (#F0EDE4).
+ * The brief's #78847D is 3.6:1 on cream, so it is --subtle (icons, placeholders), never body text.
+ * Sage #A8BBA6 is decorative on light surfaces (2:1) and only used as text on forest (5.7:1).
  *
  * Breakpoints (media queries can't read custom properties, so they're fixed here):
  *   mobile  < 600px   top bar + bottom tab bar + floating add button
@@ -28,53 +30,52 @@
   color-scheme: light;
 
   /* ---- Palette (raw) ---- */
-  --lagoon-950: #0b2422;
-  --lagoon-900: #123e3b;
-  --lagoon-800: #1d5c58;
-  --lagoon-700: #174b48;
-  --lagoon-600: #2b7a74;
-  --tide-500: #bfe0d9;
-  --tide-300: #d6ebe6;
-  --tide-100: #ddeeea;
-  --mist-100: #f4f7f5;
-  --mist-200: #e7eeea;
+  --forest-950: #0c241f;
+  --forest-900: #102f29;
+  --forest-800: #173f35;
+  --forest-700: #1f5245;
+  --forest-600: #2c6656;
+  --sage-500: #a8bba6;
+  --sage-300: #ccd8ca;
+  --sage-100: #e7eee5;
+  --cream-100: #f7f5ef;
+  --cream-200: #f0ede4;
   --white: #ffffff;
-  --ink-900: #13262a;
-  --ink-600: #53676a;
-  --ink-500: #6f8380;
+  --ink-900: #24332e;
+  --ink-600: #5f6b64;
+  --ink-500: #78847d;
   --dawn: #e8b04b;
   --dawn-deep: #9e6a0a;
-  --tide: #bfe0d9;
 
   /* ---- Semantic colour ---- */
-  --bg: var(--mist-100);
+  --bg: var(--cream-100);
   --surface: var(--white);
-  --surface-2: var(--mist-200);
-  --surface-sage: var(--tide-100);
-  --border: #dce4e0;
-  --border-strong: #b6c6c1;
+  --surface-2: var(--cream-200);
+  --surface-sage: var(--sage-100);
+  --border: #e4e1d7;
+  --border-strong: #d2cfc3;
   --text: var(--ink-900);
   --muted: var(--ink-600);
   --subtle: var(--ink-500);
-  --accent: var(--lagoon-800);
-  --accent-hover: var(--lagoon-700);
+  --accent: var(--forest-800);
+  --accent-hover: var(--forest-700);
   --accent-ink: var(--white);
-  --accent-soft: var(--tide-100);
-  --accent-text: var(--lagoon-800);
+  --accent-soft: var(--sage-100);
+  --accent-text: var(--forest-800);
   --income: #1d6385;
-  --expense: var(--text);
-  --danger: #b03a27;
-  --warn: #875600;
-  --savings: var(--dawn-deep);
   --money-out: #b4472a;
-  --focus: var(--lagoon-600);
-  --backdrop: rgb(13 25 27 / 0.42);
+  --savings: var(--dawn-deep);
+  --expense: var(--text);
+  --danger: #a8472f;
+  --warn: #8f6410;
+  --focus: var(--forest-600);
+  --backdrop: rgb(16 47 41 / 0.42);
 
   /* Hero (the one forest-filled surface) */
-  --hero-bg: var(--lagoon-800);
-  --hero-text: var(--mist-100);
-  --hero-muted: var(--tide-500);
-  --hero-line: rgb(191 224 217 / 0.24);
+  --hero-bg: var(--forest-800);
+  --hero-text: var(--cream-100);
+  --hero-muted: var(--sage-500);
+  --hero-line: rgb(168 187 166 / 0.22);
 
   /* Charts */
   --chart-income: #1d6385;
@@ -82,19 +83,19 @@
   --chart-grid: var(--border);
 
   /* Categories: earthy, distinguishable, each ≥3:1 on white */
-  --cat-0: #8b9a97;
-  --cat-1: #1d5c58;
-  --cat-2: #5b9c8f;
-  --cat-3: #b07a1c;
-  --cat-4: #3e6e9c;
-  --cat-5: #8a9a3b;
-  --cat-6: #b5576a;
-  --cat-7: #7660a8;
-  --cat-8: #c9962e;
-  --cat-9: #2f8a9a;
-  --cat-10: #a8653f;
-  --cat-11: #5c73c4;
-  --cat-12: #7f948d;
+  --cat-0: #8c968f;
+  --cat-1: #173f35;
+  --cat-2: #6b8d75;
+  --cat-3: #c0704f;
+  --cat-4: #4f7393;
+  --cat-5: #9a8a3a;
+  --cat-6: #a85f6e;
+  --cat-7: #7b6aa0;
+  --cat-8: #b8873a;
+  --cat-9: #3e8a8a;
+  --cat-10: #9c6b4e;
+  --cat-11: #6c80c2;
+  --cat-12: #5f7f68;
 
   /* ---- Typography ---- */
   --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -132,10 +133,10 @@
   --radius-full: 999px;
 
   /* ---- Elevation ---- */
-  --shadow-xs: 0 1px 2px rgb(19 38 42 / 0.05);
-  --shadow-sm: 0 1px 2px rgb(19 38 42 / 0.04), 0 4px 14px rgb(19 38 42 / 0.04);
-  --shadow-md: 0 6px 24px rgb(19 38 42 / 0.1);
-  --shadow-lg: 0 18px 50px rgb(19 38 42 / 0.2);
+  --shadow-xs: 0 1px 2px rgb(16 47 41 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(16 47 41 / 0.04), 0 4px 14px rgb(16 47 41 / 0.04);
+  --shadow-md: 0 6px 24px rgb(16 47 41 / 0.1);
+  --shadow-lg: 0 18px 50px rgb(16 47 41 / 0.2);
 
   /* ---- Layout + interaction ---- */
   --tap: 44px;
@@ -160,152 +161,6 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #0d191b;
-    --surface: #142427;
-    --surface-2: #1b2e31;
-    --surface-sage: #1a3133;
-    --border: #26393c;
-    --border-strong: #3d5456;
-    --text: #e6efec;
-    --muted: #9db1ae;
-    --subtle: #7e9592;
-    --accent: #6fc1b6;
-    --accent-hover: #8ad0c6;
-    --accent-ink: #0b1e1d;
-    --accent-soft: #183a38;
-    --accent-text: #8fd8cc;
-    --income: #7fc4e8;
-    --danger: #f28b74;
-    --warn: #f0c26a;
-    --focus: #8fd8cc;
-    --backdrop: rgb(0 0 0 / 0.6);
-    --hero-bg: #1d5c58;
-    --hero-line: rgb(191 224 217 / 0.2);
-    --chart-income: #7fc4e8;
-    --chart-expense: #f2946f;
-    --savings: #f0c26a;
-    --money-out: #f2946f;
-    --dawn-deep: #f0c26a;
-    --shadow-xs: none;
-    --shadow-sm: none;
-    --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
-    --shadow-lg: 0 18px 50px rgb(0 0 0 / 0.55);
-    --cat-0: #7e8e8b;
-    --cat-1: #6fc1b6;
-    --cat-2: #4f9c8f;
-    --cat-3: #e0a84a;
-    --cat-4: #7faad8;
-    --cat-5: #b8c46a;
-    --cat-6: #e08a9c;
-    --cat-7: #a894db;
-    --cat-8: #f0c26a;
-    --cat-9: #6cc3d0;
-    --cat-10: #d69a76;
-    --cat-11: #9aa9ee;
-    --cat-12: #a9bdb4;
-  }
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --bg: #0d191b;
-  --surface: #142427;
-  --surface-2: #1b2e31;
-  --surface-sage: #1a3133;
-  --border: #26393c;
-  --border-strong: #3d5456;
-  --text: #e6efec;
-  --muted: #9db1ae;
-  --subtle: #7e9592;
-  --accent: #6fc1b6;
-  --accent-hover: #8ad0c6;
-  --accent-ink: #0b1e1d;
-  --accent-soft: #183a38;
-  --accent-text: #8fd8cc;
-  --income: #7fc4e8;
-  --danger: #f28b74;
-  --warn: #f0c26a;
-  --focus: #8fd8cc;
-  --backdrop: rgb(0 0 0 / 0.6);
-  --hero-bg: #1d5c58;
-  --hero-line: rgb(191 224 217 / 0.2);
-  --chart-income: #7fc4e8;
-  --chart-expense: #f2946f;
-  --savings: #f0c26a;
-  --money-out: #f2946f;
-  --dawn-deep: #f0c26a;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
-  --shadow-lg: 0 18px 50px rgb(0 0 0 / 0.55);
-  --cat-0: #7e8e8b;
-  --cat-1: #6fc1b6;
-  --cat-2: #4f9c8f;
-  --cat-3: #e0a84a;
-  --cat-4: #7faad8;
-  --cat-5: #b8c46a;
-  --cat-6: #e08a9c;
-  --cat-7: #a894db;
-  --cat-8: #f0c26a;
-  --cat-9: #6cc3d0;
-  --cat-10: #d69a76;
-  --cat-11: #9aa9ee;
-  --cat-12: #a9bdb4;
-}
-
-/* ---- Style: Forest (the original forest, sage and cream look), chosen in Settings ----
-   Tide is the default above. Every token Forest's light block sets is set again in its dark blocks,
-   which are more specific, so nothing from the light values leaks into dark mode. */
-:root[data-brand='forest'] {
-  /* Raw palette back to forest, sage and cream (semantic tokens that point at these follow). */
-  --lagoon-950: #0c241f;
-  --lagoon-900: #102f29;
-  --lagoon-800: #173f35;
-  --lagoon-700: #1f5245;
-  --lagoon-600: #2c6656;
-  --tide-500: #a8bba6;
-  --tide-300: #ccd8ca;
-  --tide-100: #e7eee5;
-  --mist-100: #f7f5ef;
-  --mist-200: #f0ede4;
-  --ink-900: #24332e;
-  --ink-600: #5f6b64;
-  --ink-500: #78847d;
-  --surface-sage: var(--tide-100);
-  --border: #e4e1d7;
-  --border-strong: #d2cfc3;
-  --accent: var(--lagoon-800);
-  --accent-hover: var(--lagoon-700);
-  --accent-soft: var(--tide-100);
-  --accent-text: var(--lagoon-800);
-  --income: #2f7a57;
-  --danger: #a8472f;
-  --warn: #8f6410;
-  --focus: var(--lagoon-600);
-  --savings: var(--lagoon-800);
-  --money-out: var(--text);
-  --hero-bg: var(--lagoon-800);
-  --hero-line: rgb(168 187 166 / 0.22);
-  --chart-income: var(--lagoon-800);
-  --chart-expense: #c0704f;
-  --cat-0: #8c968f;
-  --cat-1: #173f35;
-  --cat-2: #6b8d75;
-  --cat-3: #c0704f;
-  --cat-4: #4f7393;
-  --cat-5: #9a8a3a;
-  --cat-6: #a85f6e;
-  --cat-7: #7b6aa0;
-  --cat-8: #b8873a;
-  --cat-9: #3e8a8a;
-  --cat-10: #9c6b4e;
-  --cat-11: #6c80c2;
-  --cat-12: #5f7f68;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-display: var(--font-sans);
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-brand='forest']:not([data-theme='light']) {
     --bg: #0e1714;
     --surface: #15201c;
     --surface-2: #1b2823;
@@ -320,16 +175,22 @@
     --accent-ink: #102f29;
     --accent-soft: #1f302a;
     --accent-text: #b7d0bc;
-    --income: #7cc9a0;
+    --income: #7fc4e8;
+    --money-out: #f2946f;
+    --savings: #f0c26a;
+    --dawn-deep: #f0c26a;
     --danger: #ee8f76;
     --warn: #e3b45a;
     --focus: #a8c4ae;
-    --savings: #a8c4ae;
-    --money-out: #e8ede8;
+    --backdrop: rgb(0 0 0 / 0.6);
     --hero-bg: #173f35;
     --hero-line: rgb(168 187 166 / 0.2);
-    --chart-income: #8fbf9f;
-    --chart-expense: #d89577;
+    --chart-income: #7fc4e8;
+    --chart-expense: #f2946f;
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 18px 50px rgb(0 0 0 / 0.55);
     --cat-0: #8d978f;
     --cat-1: #8fbf9f;
     --cat-2: #6faa8a;
@@ -345,7 +206,9 @@
     --cat-12: #a3bea9;
   }
 }
-:root[data-brand='forest'][data-theme='dark'] {
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #0e1714;
   --surface: #15201c;
   --surface-2: #1b2823;
@@ -360,16 +223,22 @@
   --accent-ink: #102f29;
   --accent-soft: #1f302a;
   --accent-text: #b7d0bc;
-  --income: #7cc9a0;
+  --income: #7fc4e8;
+  --money-out: #f2946f;
+  --savings: #f0c26a;
+  --dawn-deep: #f0c26a;
   --danger: #ee8f76;
   --warn: #e3b45a;
   --focus: #a8c4ae;
-  --savings: #a8c4ae;
-  --money-out: #e8ede8;
+  --backdrop: rgb(0 0 0 / 0.6);
   --hero-bg: #173f35;
   --hero-line: rgb(168 187 166 / 0.2);
-  --chart-income: #8fbf9f;
-  --chart-expense: #d89577;
+  --chart-income: #7fc4e8;
+  --chart-expense: #f2946f;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: 0 6px 24px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 18px 50px rgb(0 0 0 / 0.55);
   --cat-0: #8d978f;
   --cat-1: #8fbf9f;
   --cat-2: #6faa8a;
@@ -384,9 +253,6 @@
   --cat-11: #9aaae6;
   --cat-12: #a3bea9;
 }
-/* The logo and wordmark that go with each style (hidden, never shown, so layout rules like the icon rail still apply). */
-:root:not([data-brand='forest']) .mark-forest, :root:not([data-brand='forest']) .brand-text,
-:root[data-brand='forest'] .mark-tide, :root[data-brand='forest'] .wordmark { display: none; }
 
 /* =========================================================================
    Base
@@ -396,7 +262,7 @@ html { scroll-padding-top: 72px; }
 body { margin: 0; min-height: 100vh; min-height: 100dvh; background: var(--bg); color: var(--text); overflow-x: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--font-display); letter-spacing: -0.01em; }
-.hero-value, .stat-value, .brand-name { font-family: var(--font-display); }
+.hero-value, .stat-value { font-family: var(--font-display); }
 p { text-wrap: pretty; }
 a { color: var(--accent-text); }
 .num { font-variant-numeric: tabular-nums; }
@@ -626,7 +492,7 @@ a { color: var(--accent-text); }
 .hero::after {
   /* a single quiet ring motif; no gradients */
   content: ''; position: absolute; right: -150px; bottom: -190px; width: 340px; height: 340px; border-radius: 50%;
-  border: 1px solid var(--hero-line); box-shadow: 0 0 0 40px rgb(191 224 217 / 0.04);
+  border: 1px solid var(--hero-line); box-shadow: 0 0 0 40px rgb(168 187 166 / 0.035);
   pointer-events: none;
 }
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); position: relative; z-index: 1; }
@@ -658,7 +524,7 @@ a { color: var(--accent-text); }
 .hero-flow { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .hero-flow-icon {
   width: 38px; height: 38px; border-radius: var(--radius-md); display: grid; place-items: center; flex: none;
-  background: rgb(247 245 239 / 0.1); color: var(--tide-300);
+  background: rgb(247 245 239 / 0.1); color: var(--sage-300);
 }
 .hero-flow-text { display: flex; flex-direction: column; min-width: 0; }
 .hero-flow-label { font-size: var(--text-sm); color: var(--hero-muted); }
@@ -1173,11 +1039,11 @@ a { color: var(--accent-text); }
   position: fixed; left: calc(50% + var(--sidebar-w) / 2); transform: translateX(-50%);
   bottom: calc(24px + var(--safe-bottom)); z-index: 40;
   display: flex; align-items: center; gap: var(--space-3); max-width: min(560px, calc(100vw - 32px));
-  background: var(--lagoon-900); color: var(--mist-100); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-radius: var(--radius-md);
+  background: var(--forest-900); color: var(--cream-100); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg); font-size: var(--text-base); animation: toast-in 0.2s var(--ease);
 }
-:root[data-theme='dark'] .toast { background: #e6efec; color: #0d191b; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .toast { background: #e6efec; color: #0d191b; } }
+:root[data-theme='dark'] .toast { background: #e8ede8; color: #102f29; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .toast { background: #e8ede8; color: #102f29; } }
 .toast-action {
   border: 0; background: none; color: inherit; font-weight: 700; cursor: pointer; padding: var(--space-2);
   text-decoration: underline; text-underline-offset: 3px; min-height: 36px;
@@ -1564,5 +1430,3 @@ a { color: var(--accent-text); }
   .month-end { flex-direction: column; gap: var(--space-3); }
   .month-end-actions .btn-primary.sm, .month-end-actions .btn-secondary.sm { flex: 1; min-height: var(--control-h); }
 }
-.set-sub { margin: var(--space-2) 0 0; font-size: var(--text-base); font-weight: 600; }
-.set-sub + .segmented { max-width: 260px; }
