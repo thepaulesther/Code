@@ -45,7 +45,7 @@ export async function requestNotifications(): Promise<NotifyPermission> {
 /** Show a system notification if allowed. Uses the service worker where pages can't show one (Android). */
 export function sendNotification(title: string, body: string): void {
   if (notificationPermission() !== 'granted') return;
-  const options = { body, icon: './icon-192.png', tag: 'ledgerly-alert' };
+  const options = { body, icon: './icon-192.png', tag: 'elora-alert' };
   const viaWorker = () =>
     navigator.serviceWorker?.getRegistration().then((r) => r?.showNotification(title, options)).catch(() => {});
   try {
