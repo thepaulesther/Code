@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { monthLabel, parseAmount } from '../lib/budget';
 import { useFormat } from '../lib/format';
 import type { Plan } from '../lib/plan';
+import { reconcile } from '../lib/reconcile';
 
 const pctText = (p: number) => `${Math.round(p * 100)}%`;
 
@@ -125,6 +126,8 @@ export function PlanCard({ plan, month, isCurrentMonth, expectedIncome, onSetInc
         </div>
       )}
 
+      {isCurrentMonth && plan.income > 0 && <PlanBridge plan={plan} />}
+
       {editing ? (
         incomeEditor
       ) : (
@@ -214,5 +217,50 @@ export function PlanGlossary() {
         </div>
       </dl>
     </section>
+  );
+}
+
+/**
+ * From "Balance this month" to "Left to spend", line by line, so the two figures never seem to
+ * disagree. Lines that are zero are left out; the sum is exact (see lib/reconcile.ts).
+ */
+function PlanBridge({ plan }: { plan: Plan }) {
+  const { money } = useFormat();
+  const r = reconcile(plan);
+  const signed = (n: number) => `${n < 0 ? '−' : '+'} ${money(Math.abs(n))}`;
+  const lines: [string, string, string][] = [];
+  if (r.incomeStillExpected !== 0)
+    lines.push([
+      r.incomeStillExpected > 0 ? 'Income still expected' : 'Income above your plan',
+      r.incomeStillExpected > 0 ? 'Your planned income, minus what has come in so far.' : 'More came in than the plan assumes; the plan doesn’t count on it.',
+      signed(r.incomeStillExpected),
+    ]);
+  if (r.billsNotYetPaid !== 0)
+    lines.push([
+      r.billsNotYetPaid > 0 ? 'Bills not yet paid' : 'Bills paid ahead of this month’s share',
+      r.billsNotYetPaid > 0 ? 'Set aside for repeating bills due later this month.' : 'For example, a yearly bill paid now that counts a share each month.',
+      signed(-r.billsNotYetPaid),
+    ]);
+  if (r.savings !== 0) lines.push(['Savings to set aside', 'For your goals and emergency fund.', signed(-r.savings)]);
+  return (
+    <div className="plan-bridge">
+      <h3>How this compares with your balance</h3>
+      <dl>
+        <div>
+          <dt>Balance this month<small>Income recorded minus spending recorded.</small></dt>
+          <dd className="num">{money(r.balance)}</dd>
+        </div>
+        {lines.map(([label, hint, value]) => (
+          <div key={label}>
+            <dt>{label}<small>{hint}</small></dt>
+            <dd className="num">{value}</dd>
+          </div>
+        ))}
+        <div className="plan-bridge-total">
+          <dt>{r.leftToSpend >= 0 ? 'Left to spend' : 'Over your plan'}</dt>
+          <dd className="num">{money(r.leftToSpend)}</dd>
+        </div>
+      </dl>
+    </div>
   );
 }

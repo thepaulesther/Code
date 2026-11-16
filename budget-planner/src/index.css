@@ -1304,3 +1304,55 @@ a { color: var(--accent-text); }
   font-size: var(--text-sm); max-width: 70ch;
 }
 .data-warning .icon { color: var(--warn); margin-top: 1px; }
+
+/* ---- Stage 0.5: recovery screen ---- */
+.recovery {
+  min-height: 100vh; min-height: 100dvh; display: grid; place-items: center;
+  padding: var(--space-8) max(var(--space-4), env(safe-area-inset-right, 0px)) var(--space-8) max(var(--space-4), env(safe-area-inset-left, 0px));
+}
+.recovery-card {
+  width: min(560px, 100%); display: flex; flex-direction: column; gap: var(--space-4);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-8); box-shadow: var(--shadow-sm);
+}
+.recovery-card h1 { font-size: var(--text-2xl); letter-spacing: var(--tracking-tight); line-height: 1.2; }
+.recovery-card h1:focus { outline: none; }
+.recovery-card p { margin: 0; color: var(--muted); }
+.recovery-icon {
+  width: 48px; height: 48px; border-radius: var(--radius-md); display: grid; place-items: center;
+  background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn);
+}
+.recovery-safe { display: flex; gap: var(--space-2); align-items: center; color: var(--text) !important; font-weight: 550; }
+.recovery-safe .icon { color: var(--income); }
+.recovery-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.recovery-fresh { border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.recovery-fresh > .btn-ghost { margin-left: -12px; }
+.alert-banner .btn-secondary { margin-left: auto; align-self: center; }
+@media (max-width: 599px) { .recovery-card { padding: var(--space-5); } }
+
+/* ---- Stage 0.5: backup and restore ---- */
+.restore-problems {
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+.restore-problems ul { margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); }
+.restore-problems .hint { margin: 0; }
+.preview th[scope='row'] { text-align: left; font-weight: 550; color: var(--text); background: none; position: static; font-size: var(--text-sm); }
+.snapshots { display: flex; flex-direction: column; gap: var(--space-2); }
+.snapshots h4 { margin: 0; font-size: var(--text-md); }
+.snapshots .hint { margin: 0; }
+
+/* ---- Plan: from balance to left to spend ---- */
+.plan-bridge { display: flex; flex-direction: column; gap: var(--space-2); }
+.plan-bridge h3 { font-size: var(--text-md); font-weight: 650; }
+.plan-bridge dl { margin: 0; display: flex; flex-direction: column; }
+.plan-bridge dl > div {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  padding: var(--space-2) 0; border-top: 1px solid var(--border); font-size: var(--text-base);
+}
+.plan-bridge dl > div:first-child { border-top: 0; }
+.plan-bridge dt { font-weight: 550; min-width: 0; }
+.plan-bridge dt small { display: block; font-weight: 400; color: var(--muted); font-size: var(--text-xs); }
+.plan-bridge dd { margin: 0; font-weight: 600; white-space: nowrap; }
+.plan-bridge .plan-bridge-total { border-top: 2px solid var(--border-strong); font-weight: 700; }
+.plan-bridge .plan-bridge-total dd { font-size: var(--text-md); font-weight: 700; }
+.coming-up .hint { margin-top: var(--space-2); }

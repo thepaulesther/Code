@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
@@ -13,7 +13,8 @@ import {
 import { conversionRate, round2, type RateCache } from './currency';
 import { DEFAULT_PLAN, syncAutoSavings, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
-import { readJSON, writeJSON } from './storage';
+import { CURRENT_VERSION, migrate, versionOf } from './migrations';
+import { keysWithPrefix, readJSON, readRaw, removeKey, writeRaw } from './storage';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -242,21 +243,108 @@ export function stopRule(d: AppData, id: string, deletePayments: boolean): AppDa
   };
 }
 
-export function loadData(): AppData {
-  const saved = readJSON(KEY);
-  if (isAppData(saved)) return markLegacySamples({ ...saved, settings: { ...defaultSettings(), ...saved.settings } });
+/* ---------- Opening the store safely ---------- */
 
-  // Migrate from the first version, which stored two separate keys.
-  const oldTx = readJSON('bp.transactions');
-  if (isTxArray(oldTx)) {
-    const oldBudgets = readJSON('bp.budgets');
-    // That version only worked in US dollars.
-    const settings = { ...defaultSettings(), currency: 'USD' };
-    return { version: 2, transactions: oldTx, budgets: isBudgets(oldBudgets) ? oldBudgets : {}, recurring: [], settings };
+/**
+ * What was found in storage. Only `ok`, `migrated` and `empty` hand data to the app; `newer` and
+ * `unreadable` stop before anything is saved, so data Elora can't read is never overwritten.
+ */
+export type StoreState =
+  | { status: 'ok' | 'empty'; data: AppData }
+  | { status: 'migrated'; data: AppData; from: number; snapshotKey: string }
+  | { status: 'newer'; version: number; raw: string }
+  | { status: 'unreadable'; reason: string; raw: string };
+
+/** Fill missing settings with defaults and validate; null when the data isn't usable. */
+export function completeData(candidate: unknown): AppData | null {
+  if (!isObj(candidate)) return null;
+  const settings = isObj(candidate.settings) ? candidate.settings : {};
+  const merged = { ...candidate, settings: { ...defaultSettings(), ...settings } };
+  return isAppData(merged) ? markLegacySamples(merged) : null;
+}
+
+export function openStore(): StoreState {
+  let raw = readRaw(KEY);
+  let parsed: unknown;
+  if (raw == null) {
+    // The first version stored two separate keys; it's upgraded like any other old format.
+    const oldTx = readJSON('bp.transactions');
+    if (!isTxArray(oldTx)) return { status: 'empty', data: emptyData(defaultSettings()) };
+    parsed = { version: 1, transactions: oldTx, budgets: readJSON('bp.budgets') ?? {} };
+    raw = JSON.stringify(parsed);
+  } else {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { status: 'unreadable', reason: 'The saved data isn’t complete. It may have been cut off while it was being saved.', raw };
+    }
   }
+  const version = versionOf(parsed);
+  if (version == null) return { status: 'unreadable', reason: 'The saved data doesn’t say which version of Elora saved it.', raw };
+  if (version > CURRENT_VERSION) return { status: 'newer', version, raw };
+  if (version === CURRENT_VERSION) {
+    const data = completeData(parsed);
+    return data ? { status: 'ok', data } : { status: 'unreadable', reason: 'Some of the saved data is missing or isn’t in the shape Elora expects.', raw };
+  }
+  // An older format: keep a verified copy before changing anything.
+  const snapshotKey = takeSnapshot(`v${version}`, raw);
+  if (!snapshotKey) {
+    return {
+      status: 'unreadable',
+      reason: 'Your data needs a small upgrade, but Elora couldn’t save a safety copy first (browser storage may be full). Nothing was changed.',
+      raw,
+    };
+  }
+  const m = migrate(parsed);
+  if (!m.ok) return { status: 'unreadable', reason: `${m.reason} Nothing was changed, and a safety copy was kept.`, raw };
+  const data = completeData(m.data);
+  if (!data) return { status: 'unreadable', reason: 'The upgraded data didn’t pass Elora’s checks. Nothing was changed, and a safety copy was kept.', raw };
+  return { status: 'migrated', data, from: version, snapshotKey };
+}
 
-  // First visit: start empty so every number on screen comes from the user's own entries.
-  return emptyData(defaultSettings());
+/* ---------- Safety copies ---------- */
+
+const SNAPSHOT_PREFIX = 'bp.snapshot.';
+const MAX_SNAPSHOTS = 3;
+
+export interface Snapshot {
+  key: string;
+  /** Why it was taken: "v1" (before an upgrade from version 1), "restore" (before a restore). */
+  reason: string;
+  at: string;
+  bytes: number;
+}
+
+export function listSnapshots(): Snapshot[] {
+  return keysWithPrefix(SNAPSHOT_PREFIX)
+    .map((key) => {
+      const rest = key.slice(SNAPSHOT_PREFIX.length);
+      const dot = rest.indexOf('.');
+      return { key, reason: rest.slice(0, dot), at: rest.slice(dot + 1), bytes: (readRaw(key) ?? '').length };
+    })
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/**
+ * Save `text` as a safety copy and read it back to make sure it's intact. Keeps the newest
+ * MAX_SNAPSHOTS copies. Returns the key, or null when the copy couldn't be saved.
+ */
+export function takeSnapshot(reason: string, text: string, now = new Date()): string | null {
+  const key = `${SNAPSHOT_PREFIX}${reason}.${now.toISOString()}`;
+  if (!writeRaw(key, text) || readRaw(key) !== text) {
+    removeKey(key);
+    return null;
+  }
+  for (const old of listSnapshots().slice(MAX_SNAPSHOTS)) removeKey(old.key);
+  return key;
+}
+
+export const readSnapshot = (key: string) => readRaw(key);
+export const deleteSnapshot = (key: string) => removeKey(key);
+
+/** Keep data Elora couldn't read under a separate key before starting fresh. */
+export function quarantine(raw: string, now = new Date()): boolean {
+  return writeRaw(`bp.unreadable.${now.toISOString()}`, raw);
 }
 
 export const isEmpty = (d: AppData) =>
@@ -375,8 +463,16 @@ export function withAutoSavings(d: AppData): AppData {
   return goals === d.goals ? d : { ...d, goals };
 }
 
-export function useAppData() {
-  const [data, setRaw] = useState<AppData>(() => withAutoSavings(applyRecurring(loadData(), todayISO())));
+export interface SaveStatus {
+  /** The browser refused the last save (storage full or blocked). */
+  saveFailed: boolean;
+  /** Another tab saved data in a newer format; this tab stops saving until it's reloaded. */
+  newerElsewhere: boolean;
+}
+
+export function useAppData(initial: AppData) {
+  const [data, setRaw] = useState<AppData>(() => withAutoSavings(applyRecurring(initial, todayISO())));
+  const [status, setStatus] = useState<SaveStatus>({ saveFailed: false, newerElsewhere: false });
 
   // Every change (adding, editing, deleting, importing, undo) keeps automatic savings in step.
   const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
@@ -384,7 +480,40 @@ export function useAppData() {
     [],
   );
 
-  useEffect(() => writeJSON(KEY, data), [data]);
+  // Save only real changes. Starting from what's stored means opening the app writes nothing.
+  const lastSaved = useRef<string | null>(readRaw(KEY));
+  useEffect(() => {
+    if (status.newerElsewhere) return;
+    const text = JSON.stringify(data);
+    if (text === lastSaved.current) return;
+    const ok = writeRaw(KEY, text);
+    if (ok) lastSaved.current = text;
+    setStatus((s) => (s.saveFailed === !ok ? s : { ...s, saveFailed: !ok }));
+  }, [data, status.newerElsewhere]);
+
+  // Another tab saved: take its data instead of overwriting it with ours.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== KEY || e.newValue == null) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(e.newValue);
+      } catch {
+        return;
+      }
+      const v = versionOf(parsed);
+      if (v != null && v > CURRENT_VERSION) {
+        setStatus((s) => ({ ...s, newerElsewhere: true }));
+        return;
+      }
+      const next = v === CURRENT_VERSION ? completeData(parsed) : null;
+      if (!next) return;
+      lastSaved.current = e.newValue;
+      setRaw(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // If the tab is left open across a due date, add the new transactions when it's shown again.
   useEffect(() => {
@@ -395,5 +524,28 @@ export function useAppData() {
     return () => document.removeEventListener('visibilitychange', onShow);
   }, [setData]);
 
-  return [data, setData] as const;
+  return [data, setData, status] as const;
+}
+
+/**
+ * Today's date (YYYY-MM-DD), kept current while the app stays open: checked every minute and whenever
+ * the window comes back into view, so a bill due today is added even if Elora was left open overnight.
+ */
+export function useToday(): string {
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => {
+    const check = () => setToday((prev) => {
+      const now = todayISO();
+      return now === prev ? prev : now;
+    });
+    const timer = window.setInterval(check, 60_000);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
+  return today;
 }

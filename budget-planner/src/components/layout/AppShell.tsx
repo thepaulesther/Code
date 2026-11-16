@@ -141,12 +141,13 @@ function MenuButton({ icon, label, hint, onClick, disabled }: {
 }
 
 /** The phone's "More" sheet: secondary pages and actions. */
-export function MoreSheet({ open, onClose, route, onImport, onExport, onInstall, canImport, canExport }: {
+export function MoreSheet({ open, onClose, route, onImport, onExport, onBackup, onInstall, canImport, canExport }: {
   open: boolean;
   onClose: () => void;
   route: Route;
   onImport: () => void;
   onExport: () => void;
+  onBackup: () => void;
   onInstall: (() => void) | null;
   canImport: boolean;
   canExport: boolean;
@@ -165,6 +166,7 @@ export function MoreSheet({ open, onClose, route, onImport, onExport, onInstall,
       </ul>
       <h3 className="menu-heading">Your data</h3>
       <ul className="menu-list">
+        <MenuButton icon="download" label="Back up all data" hint="Transactions, budgets, goals and settings" onClick={then(onBackup)} />
         <MenuButton icon="import" label="Import CSV" hint={canImport ? 'From your bank or card' : 'Choose your currency first'} onClick={then(onImport)} disabled={!canImport} />
         <MenuButton icon="export" label="Export CSV" hint={canExport ? 'Back up or move your data' : 'Nothing to export yet'} onClick={then(onExport)} disabled={!canExport} />
         {onInstall && <MenuButton icon="download" label="Install app" hint="Add Elora to your home screen" onClick={then(onInstall)} />}

@@ -132,6 +132,45 @@ describe('buildPlan', () => {
   });
 });
 
+describe('bills and repeating items (regression cases A–D from docs/redesign/03-review-round.md)', () => {
+  // 3 months of £3,000 income before November; rent of £1,000 a month.
+  const income = [9, 10, 11].map((m) => ({
+    id: `i${m}`, type: 'income' as const, amount: 3000, category: 'Salary', note: '', date: `2026-${String(m).padStart(2, '0')}-01`,
+  }));
+  const rule = { id: 'r1', type: 'expense' as const, amount: 1000, category: 'Housing', note: 'Rent', day: 1, startMonth: '2026-09' };
+  const paid = { id: 'p', type: 'expense' as const, amount: 1000, category: 'Housing', note: 'Rent', date: '2026-11-01', recurringId: 'r1' };
+  const run = (transactions: Transaction[], recurring: RecurringRule[]) =>
+    buildPlan({ transactions, recurring, goals: [], month: '2026-11', today: '2026-11-14', settings: { savingsRate: 0.2, emergencyMonths: 12 } });
+
+  it('A: a repeating bill paid this month is counted once, as a bill', () => {
+    expect(run([...income, paid], [rule])).toMatchObject({ fixed: 1000, spentFree: 0, free: 2000, leftToSpend: 2000 });
+  });
+
+  it('B (F5): a bill paused after this month’s payment still counts as a bill this month', () => {
+    // Before the fix: fixed 0, spentFree 0, leftToSpend 3000 (the payment counted nowhere).
+    expect(run([...income, paid], [{ ...rule, paused: true }])).toMatchObject({ fixed: 1000, spentFree: 0, free: 2000, leftToSpend: 2000 });
+  });
+
+  it('B (F5): the same holds when the repeating item no longer exists but its payment kept the link', () => {
+    expect(run([...income, paid], [])).toMatchObject({ fixed: 1000, leftToSpend: 2000 });
+  });
+
+  it('B (F5): a paused bill with no payment this month isn’t set aside', () => {
+    expect(run(income, [{ ...rule, paused: true }])).toMatchObject({ fixed: 0, leftToSpend: 3000 });
+  });
+
+  it('C: rent typed in by hand is everyday spending, and what’s left is the same', () => {
+    expect(run([...income, { ...paid, recurringId: undefined }], [])).toMatchObject({ fixed: 0, spentFree: 1000, free: 3000, leftToSpend: 2000 });
+  });
+
+  it('D (F6): a repeating item isn’t set aside before the month it starts', () => {
+    // Before the fix: fixed 1000 and leftToSpend 2000 in the month before its first payment.
+    expect(run(income, [{ ...rule, startMonth: '2026-12' }])).toMatchObject({ fixed: 0, leftToSpend: 3000 });
+    // From its start month it is.
+    expect(run(income, [{ ...rule, startMonth: '2026-11' }])).toMatchObject({ fixed: 1000, leftToSpend: 2000 });
+  });
+});
+
 describe('saving a share of income (e.g. 20% to the emergency fund)', () => {
   const fund20: Goal = { ...fund, incomeShare: 0.2, autoSave: true, autoSince: '2026-11-01' };
 

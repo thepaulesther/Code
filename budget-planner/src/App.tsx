@@ -26,6 +26,10 @@ import {
   type Transaction,
   type TxType,
 } from './lib/budget';
+import { readSnapshot, takeSnapshot, type AppData } from './lib/store';
+import { createBackup } from './lib/backup';
+import { downloadText, fileDate } from './lib/download';
+import { RestoreDialog } from './components/RestoreDialog';
 import { PrefsContext } from './lib/format';
 import { IS_ARTIFACT, useInstallPrompt, useOnline } from './lib/pwa';
 import { conversionRate, useRates } from './lib/currency';
@@ -43,6 +47,7 @@ import {
   saveGoal,
   stopRule,
   useAppData,
+  useToday,
 } from './lib/store';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
@@ -59,6 +64,8 @@ import {
 } from './lib/plan';
 import { hrefFor, navigate, useRoute, type Route } from './lib/route';
 import { changeLabel, compareMonths } from './lib/compare';
+import { upcomingThisMonth } from './lib/reconcile';
+import { ComingUp } from './components/overview/ComingUp';
 import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
@@ -71,7 +78,6 @@ import { OverviewPreview, SetupGuide, type SetupStep } from './components/overvi
 import { useSetupPrefs } from './lib/setup';
 import { overviewInsights } from './lib/insights';
 
-const CURRENT_MONTH = monthOf(todayISO());
 
 const PHONE_QUERY = '(max-width: 599px)';
 function useIsPhone() {
@@ -113,8 +119,20 @@ const PAGE_TITLES: Record<Route, string> = {
 
 type DialogName = 'import' | 'export' | null;
 
-export default function App() {
-  const [data, setData] = useAppData();
+export default function App({ initial, notice }: {
+  /** The saved data, already opened and checked (see Root). */
+  initial: AppData;
+  /** A message to show once on start, e.g. after an upgrade. */
+  notice?: string;
+}) {
+  const [data, setData, saveStatus] = useAppData(initial);
+  // Today, kept current while the app stays open (it may be left open across a due date or a month end).
+  const today = useToday();
+  const CURRENT_MONTH = monthOf(today);
+  // When the date changes, add repeating payments that have come due.
+  useEffect(() => {
+    setData((d) => applyRecurring(d, today));
+  }, [today, setData]);
   const { transactions, budgets, recurring, settings } = data;
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
@@ -122,7 +140,7 @@ export default function App() {
   const [adding, setAdding] = useState<TxType | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(notice ? { text: notice } : null);
   const setToast = (text: string | null, undo?: () => void) => setToastState(text ? { text, undo } : null);
   const install = useInstallPrompt();
   const online = useOnline();
@@ -151,7 +169,7 @@ export default function App() {
   const monthTx = useMemo(() => effectiveInMonth(transactions, month), [transactions, month]);
   const t = useMemo(() => totals(monthTx), [monthTx]);
   // Month-on-month changes stop at the same day while the month is still running.
-  const comparison = useMemo(() => compareMonths(transactions, month, todayISO()), [transactions, month]);
+  const comparison = useMemo(() => compareMonths(transactions, month, today), [transactions, month, today]);
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
@@ -168,12 +186,22 @@ export default function App() {
       recurring,
       goals,
       month: m,
-      today: todayISO(),
+      today,
       settings: planSettings,
       rateFor: (c) => conversionRate(data.rates, c, settings.currency),
     });
   const plan = planFor(month);
   const currentPlan = month === CURRENT_MONTH ? plan : planFor(CURRENT_MONTH);
+  // Repeating items still due later this month: added automatically on the day.
+  const upcoming = upcomingThisMonth(recurring, today, rateFor);
+  // If the month rolls over while the app is open on "this month", follow it to the new month.
+  const shownCurrent = useRef(CURRENT_MONTH);
+  useEffect(() => {
+    const previous = shownCurrent.current; // read now: the update below runs later
+    if (previous === CURRENT_MONTH) return;
+    setMonth((m) => (m === previous ? CURRENT_MONTH : m));
+    shownCurrent.current = CURRENT_MONTH;
+  }, [CURRENT_MONTH]);
   const alert = alertSettings.enabled && settings.currency ? alertFor(plan, money) : null;
   const currentAlert = alertSettings.enabled && settings.currency ? alertFor(currentPlan, money) : null;
 
@@ -361,6 +389,28 @@ export default function App() {
 
 
   const setup = useSetupPrefs();
+  // ---- Full backup and restore ----
+  const [restoring, setRestoring] = useState<string | null>(null); // null: closed; '' : choose a file; text: check it
+  const [backupText, setBackupText] = useState<string | null>(null);
+  const backup = () => {
+    void createBackup(data).then((text) => {
+      if (IS_ARTIFACT || !downloadText(`elora-backup-${fileDate()}.json`, text)) setBackupText(text);
+      else setToast('Downloaded a full backup. Keep it somewhere safe, such as your email or cloud storage.');
+    });
+  };
+  const restore = (next: AppData) => {
+    const before = data;
+    // Never replace data without a safety copy.
+    if (!takeSnapshot('restore', JSON.stringify(before))) {
+      setToast('Restore cancelled: Elora couldn’t keep a safety copy of your current data (browser storage may be full).');
+      return;
+    }
+    setData(next);
+    setRestoring(null);
+    setMonth(CURRENT_MONTH);
+    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setData(before));
+  };
+
   const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
@@ -613,6 +663,7 @@ export default function App() {
             <div className="section-grid">
               <div className="span-8">{txList}</div>
               <div className="span-4 stack">
+                {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
                 {recurringPanel}
                 <p className="fineprint">Your data stays in this browser.{!IS_ARTIFACT && ' Only exchange rates are downloaded.'}</p>
               </div>
@@ -754,6 +805,12 @@ export default function App() {
                 navigate('overview');
               }}
               onExport={() => setDialog('export')}
+              onBackup={backup}
+              onRestore={(text) => setRestoring(text ?? '')}
+              onDownloadSnapshot={(key) => {
+                const text = readSnapshot(key);
+                if (text && (IS_ARTIFACT || !downloadText(`elora-safety-copy-${fileDate()}.json`, text))) setBackupText(text);
+              }}
               canExport={transactions.length > 0}
               setupHidden={setup.prefs.hidden}
               onShowSetup={() => {
@@ -853,7 +910,8 @@ export default function App() {
                   )}
                 </div>
                 <div className="span-7">{trendCard(isPhone)}</div>
-                <div className="span-5">
+                <div className="span-5 stack">
+                  {month === CURRENT_MONTH && upcoming.length > 0 && <ComingUp items={upcoming} />}
                   <TransactionList
                     transactions={monthTx}
                     onDelete={remove}
@@ -892,6 +950,25 @@ export default function App() {
         <Sidebar route={route} online={online} onInstall={install} />
         <MobileTopBar online={online} />
         <Main>
+          {saveStatus.newerElsewhere && (
+            <div className="alert-banner level-over-plan" role="alert">
+              <span className="alert-icon"><Icon name="alert" size={20} /></span>
+              <div>
+                <strong>Elora was updated in another tab</strong>
+                <p>To keep your data safe, changes made in this tab aren’t being saved. Reload to use the new version.</p>
+              </div>
+              <button type="button" className="btn-secondary sm" onClick={() => window.location.reload()}>Reload</button>
+            </div>
+          )}
+          {saveStatus.saveFailed && !saveStatus.newerElsewhere && (
+            <div className="alert-banner level-over-plan" role="alert">
+              <span className="alert-icon"><Icon name="alert" size={20} /></span>
+              <div>
+                <strong>Your latest change couldn’t be saved</strong>
+                <p>This browser refused to store it, usually because its storage is full. Download a backup in Settings › Your data before closing Elora.</p>
+              </div>
+            </div>
+          )}
           <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
         </Main>
         <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
@@ -903,6 +980,7 @@ export default function App() {
           route={route}
           onImport={() => setDialog('import')}
           onExport={() => setDialog('export')}
+          onBackup={backup}
           onInstall={install}
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
@@ -950,6 +1028,20 @@ export default function App() {
           suggestedEmergency={suggestedEmergencyTarget(transactions, CURRENT_MONTH)}
           onSave={saveGoalAndMoney}
         />
+        <RestoreDialog
+          open={restoring != null}
+          onClose={() => setRestoring(null)}
+          initialText={restoring || undefined}
+          current={data}
+          onRestore={restore}
+        />
+        <Modal open={backupText != null} onClose={() => setBackupText(null)} title="Your backup">
+          <p className="modal-text">
+            Downloads aren’t available here. Copy this text and keep it somewhere safe; you can restore it with
+            “Restore from backup” → “Paste the backup text instead”.
+          </p>
+          <textarea id="backup-text" className="csv-box" readOnly rows={10} value={backupText ?? ''} aria-label="Backup" />
+        </Modal>
         <ImportDialog
           open={dialog === 'import'}
           onClose={() => setDialog(null)}

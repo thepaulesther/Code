@@ -44,6 +44,8 @@ On desktop the pages are in a sidebar, on tablets in an icon rail, and on phones
   - signed amounts, `(12.00)` and `1.234,56` formats
   - separate money-in and money-out columns
   - duplicates of what you already have, which it skips
+- **Full backup and restore**: Settings › Your data › *Download full backup* saves everything (transactions, repeating items, budgets, goals, settings) as one JSON file with a checksum. *Restore from backup* checks the file record by record, shows what it holds next to what you have, and replaces your data only after you confirm; your previous data is kept as a safety copy and the restore can be undone.
+- **Data safety**: Elora never overwrites saved data it can't read. If the data is damaged, or was saved by a newer version of Elora, a recovery screen lets you download it as it is. Upgrades to the data format keep a verified safety copy first. Two open tabs don't overwrite each other. Data is stored unencrypted in the browser, so anyone with access to the browser profile (or another script on the same website address) can read it.
 - **CSV export**: download, or copy to the clipboard; re-importing the file skips duplicates. It holds transactions only, not budgets, goals or settings
 - **Multi-currency**: pick a **base currency** from every ISO currency (Naira, Yen, Cedi and so on), which all totals, budgets and charts use. Any transaction can be entered in another currency. For example, a remote worker with a Naira base can record a $5,000 salary: the app suggests today's market rate, you can type the rate you actually got, and ₦ is added to your totals while the original "$5,000 @ 1,480" is kept.
   - Repeating items can be in a foreign currency; each month converts at the latest rate.
@@ -65,7 +67,8 @@ When you add a repeating item that matches an existing one (say, a yearly “Ren
 ```bash
 npm install
 npm run dev              # http://localhost:5173
-npm test                 # unit tests (budget maths, repeating rules, CSV parsing, categories, routing, insights)
+npm test                 # unit tests (budget maths, plan, repeating rules, CSV, migrations, backup, routing, insights)
+npm run test:e2e         # browser tests: journeys, data safety, offline, layout at 8 widths, accessibility (WCAG 2.2 AA)
 npm run lint
 npm run build            # type-check + production build into dist/
 npm run build:artifact   # single self-contained HTML file in dist-artifact/

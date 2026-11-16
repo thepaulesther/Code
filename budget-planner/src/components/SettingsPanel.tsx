@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { currencyName, formatMoney, shortDate, type TxType } from '../lib/budget';
 import { conversionRate, parseRate, rateForInput, type RateCache, type RatesStatus } from '../lib/currency';
 import { useFormat } from '../lib/format';
@@ -10,7 +10,11 @@ import {
   categoryNameError,
   changeBaseCurrency,
   deleteCategory,
+  deleteSnapshot,
   emptyData,
+  listSnapshots,
+  readSnapshot,
+  takeSnapshot,
   renameCategory,
   type AppData,
   type Theme,
@@ -19,6 +23,12 @@ import { CurrencySelect, RateField } from './CurrencyFields';
 import { Icon } from './ui/Icon';
 
 type SetData = Dispatch<SetStateAction<AppData>>;
+
+const SNAPSHOT_REASONS: Record<string, string> = {
+  restore: 'Before a restore',
+  reset: 'Before deleting everything',
+  v1: 'Before upgrading old data',
+};
 
 function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
   const plan = planSettingsOf(data.settings);
@@ -223,9 +233,14 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
 }
 
 /** The Settings page. */
-export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onShowSetup, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
   /** Called after "Delete all data". */
   onReset: () => void;
+  /** Download (or show) a full backup. */
+  onBackup: () => void;
+  /** Open the restore dialog, optionally with text to check (a safety copy). */
+  onRestore: (text?: string) => void;
+  onDownloadSnapshot: (key: string) => void;
   onExport: () => void;
   canExport: boolean;
   /** The Overview's setup guide was hidden on this device. */
@@ -239,6 +254,9 @@ export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onSho
 }) {
   const { settings, rates } = data;
   const [confirmReset, setConfirmReset] = useState(false);
+  const [snapshots, setSnapshots] = useState(listSnapshots);
+  // Refresh the list when data changes (a restore or delete adds a copy).
+  useEffect(() => setSnapshots(listSnapshots()), [data]);
   const setSettings = (patch: Partial<AppData['settings']>) =>
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
 
@@ -292,12 +310,23 @@ export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onSho
         <p className="data-warning">
           <Icon name="alert" size={16} />
           <span>
-            Clearing this browser’s site data, browsing privately, or switching to another browser or device means
-            starting without it. Export your transactions as a CSV now and then: you can import the file on any device.
-            The CSV holds transactions only, so note your budgets and goals separately.
+            <strong>Keep a backup.</strong> Clearing this browser’s site data, browsing privately, or switching to
+            another browser or device means starting without your data. A full backup holds everything (transactions,
+            budgets, goals, repeating items and settings) and can be restored on any device. The CSV export holds
+            transactions only.
           </span>
         </p>
+        <p className="hint">
+          Your data is stored unencrypted in this browser. Anyone who can use this browser profile can see it, and so
+          can other scripts running on the same website address. Don’t use Elora on a shared or public computer.
+        </p>
         <div className="head-actions">
+          <button type="button" className="btn-primary sm" onClick={onBackup}>
+            <Icon name="download" size={16} /> Download full backup
+          </button>
+          <button type="button" className="btn-secondary sm" onClick={() => onRestore()}>
+            <Icon name="import" size={16} /> Restore from backup…
+          </button>
           <button type="button" className="btn-secondary sm" onClick={onExport} disabled={!canExport}>
             <Icon name="export" size={16} /> Export transactions (CSV)
           </button>
@@ -305,6 +334,37 @@ export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onSho
             <button type="button" className="btn-ghost sm" onClick={onShowSetup}>Show the setup guide</button>
           )}
         </div>
+        {snapshots.length > 0 && (
+          <div className="snapshots">
+            <h4>Safety copies in this browser</h4>
+            <p className="hint">
+              Kept automatically before an upgrade, a restore or deleting everything. The newest three are kept.
+            </p>
+            <ul className="cat-list">
+              {snapshots.map((s) => (
+                <li key={s.key}>
+                  <span className="cat-name">
+                    {SNAPSHOT_REASONS[s.reason] ?? 'Safety copy'} · {new Date(s.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  </span>
+                  <span className="cat-count muted num">{Math.max(1, Math.round(s.bytes / 1024))} KB</span>
+                  <button type="button" className="btn-ghost sm" onClick={() => onDownloadSnapshot(s.key)}>Download</button>
+                  <button type="button" className="btn-ghost sm" onClick={() => onRestore(readSnapshot(s.key) ?? '')}>Restore</button>
+                  <button
+                    type="button"
+                    className="btn-ghost sm danger"
+                    onClick={() => {
+                      deleteSnapshot(s.key);
+                      setSnapshots(listSnapshots());
+                    }}
+                    aria-label={`Delete the safety copy from ${s.at}`}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {confirmReset ? (
           <div className="confirm-row" role="alert">
             <span>Delete all transactions, budgets, goals and repeating items? This can’t be undone.</span>
@@ -314,6 +374,8 @@ export function SettingsPanel({ onReset, onExport, canExport, setupHidden, onSho
                 type="button"
                 className="btn-danger"
                 onClick={() => {
+                  // Keep a safety copy, so even this can be undone from the list above.
+                  takeSnapshot('reset', JSON.stringify(data));
                   setData((d) => emptyData(d.settings));
                   setConfirmReset(false);
                   onReset();

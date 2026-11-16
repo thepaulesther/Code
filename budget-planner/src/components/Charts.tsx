@@ -144,7 +144,8 @@ export function TrendChart({ data, selected, onSelect }: {
               tabIndex={0}
               aria-pressed={isSel}
               role="button"
-              aria-label={`${monthLabel(d.month)}: income ${money(d.income)}, expenses ${money(d.expense)}`}
+              // Starts with the visible label ("Nov") so voice control ("click Nov") and screen readers agree.
+              aria-label={`${monthLabel(d.month, 'short')} ${d.month.slice(0, 4)}: income ${money(d.income)}, spending ${money(d.expense)}`}
             >
               <rect x={cx - band / 2 + 2} y={PAD.top} width={band - 4} height={innerH} className="trend-hit" rx="6" />
               <rect x={cx - barW - 1.5} y={y(d.income)} width={barW} height={y(0) - y(d.income)} rx="4" className="bar-income" />
@@ -152,7 +153,6 @@ export function TrendChart({ data, selected, onSelect }: {
               <text x={cx} y={H - 8} textAnchor="middle" className={`axis ${isSel ? 'axis-strong' : ''}`}>
                 {monthLabel(d.month, 'short')}
               </text>
-              <title>{`${monthLabel(d.month)}\nIncome ${money(d.income)}\nExpenses ${money(d.expense)}`}</title>
             </g>
           );
         })}
