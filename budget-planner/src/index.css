@@ -1548,7 +1548,7 @@ a { color: var(--accent-text); }
 .dash-summary:hover { background: var(--surface-2); }
 .dash-summary[aria-expanded="true"] { border-color: var(--border-strong); }
 .dash-summary-text strong { font-family: var(--font-display); font-weight: 600; font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dash-summary-text .savings { color: var(--savings); }
+/* The savings figure stays in text colour: gold text is too faint on the light tile (brand book note). */
 .dash-panel { display: flex; flex-direction: column; gap: var(--space-3); }
 .dash-panel p { margin: 0; }
 .dash-goals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
