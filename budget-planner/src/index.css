@@ -1495,7 +1495,7 @@ a { color: var(--accent-text); }
 .dash-unsorted-line .in { color: var(--income); }
 .dash-unsorted-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
 .dash-unsorted-actions .btn-secondary { justify-content: center; }
-.dash-unsorted-actions .btn-secondary.is-on, .dash-unsorted-actions .btn-secondary.is-on:hover { background: var(--text); color: var(--surface); border-color: var(--text); }
+.dash-unsorted-actions .btn-secondary.is-on, .dash-unsorted-actions .btn-secondary.is-on:hover, .box-form .btn-secondary.is-on, .box-form .btn-secondary.is-on:hover { background: var(--text); color: var(--surface); border-color: var(--text); }
 .dash-split { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .dash-split-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .dash-split-parts > span {

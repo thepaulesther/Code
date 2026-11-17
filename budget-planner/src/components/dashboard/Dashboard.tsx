@@ -50,7 +50,9 @@ interface Props {
   /** Shown above everything: the setup steps for new users, the example-data note, alerts. */
   top?: ReactNode;
   onAdd: (type: TxType, category?: string) => void;
-  onEditBoxes: () => void;
+  /** Open the form for a new money box, or for changing an existing one. */
+  onNewBox: () => void;
+  onEditBox: (category: string, limit: number) => void;
   /** Business mode: move money between Personal and Business. */
   onPay?: () => void;
   onSort: (id: string, book: Book) => void;
@@ -60,7 +62,7 @@ interface Props {
   seePlan: string;
 }
 
-export function Dashboard({ store, book, view, today, plan, top, onAdd, onEditBoxes, onPay, onSort, onSplit, seeTransactions, seeSavings, seePlan }: Props) {
+export function Dashboard({ store, book, view, today, plan, top, onAdd, onNewBox, onEditBox, onPay, onSort, onSplit, seeTransactions, seeSavings, seePlan }: Props) {
   const { money } = useFormat();
   const month = monthOf(today);
   const [hidden, setHidden] = useState(readHidden);
@@ -175,7 +177,7 @@ export function Dashboard({ store, book, view, today, plan, top, onAdd, onEditBo
             );
           })}
           <li>
-            <button type="button" className="dash-tile" onClick={onEditBoxes}>
+            <button type="button" className="dash-tile" onClick={onNewBox}>
               <span className="dash-tile-icon is-new"><Icon name="plus" size={22} /></span>
               <span className="dash-tile-name">{boxes.length ? 'New box' : 'Add a box'}</span>
             </button>
@@ -208,7 +210,7 @@ export function Dashboard({ store, book, view, today, plan, top, onAdd, onEditBo
             </dl>
             <div className="dash-detail-actions">
               <button type="button" className="btn-primary sm" onClick={() => onAdd('expense', selected.category)}>Add expense</button>
-              <button type="button" className="btn-secondary sm" onClick={onEditBoxes}><Icon name="edit" size={16} />Edit</button>
+              <button type="button" className="btn-secondary sm" onClick={() => onEditBox(selected.category, selected.limit)}><Icon name="edit" size={16} />Edit</button>
             </div>
           </div>
         )}

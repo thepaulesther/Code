@@ -47,6 +47,7 @@ import {
   removeSamples,
   saveGoal,
   stopRule,
+  addCategory,
   changeStoreCurrency,
   encodeForSave,
   applyRecurringAll,
@@ -78,6 +79,7 @@ import { ComingUp } from './components/overview/ComingUp';
 import { AddMenu, Main, MobileTopBar, MoreSheet, Sidebar, TabBar, type AddMenuItem } from './components/layout/AppShell';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { PayYourself } from './components/dashboard/PayYourself';
+import { BoxForm } from './components/dashboard/BoxForm';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
 import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
@@ -175,6 +177,28 @@ export default function App({ initial, notice }: {
     setAdding(type);
   };
   const [paying, setPaying] = useState(false);
+  // The money box form: {} for a new box, or the box being changed.
+  const [boxForm, setBoxForm] = useState<{ editing?: { category: string; limit: number } } | null>(null);
+  const saveBox = (name: string, amount: number) => {
+    const before = data;
+    const isNew = !boxForm?.editing;
+    setData((d) => {
+      const withCategory = d.settings.expenseCategories.includes(name) ? d : addCategory(d, 'expense', name);
+      return { ...withCategory, budgets: { ...withCategory.budgets, [name]: amount } };
+    });
+    setBoxForm(null);
+    setToast(isNew ? `Added the ${name} box: ${money(amount)} a month.` : `${name} now holds ${money(amount)} a month.`, () => setData(before));
+  };
+  const removeBox = (name: string) => {
+    const before = data;
+    setData((d) => {
+      const budgets = { ...d.budgets };
+      delete budgets[name];
+      return { ...d, budgets };
+    });
+    setBoxForm(null);
+    setToast(`Removed the ${name} box. Its payments are kept.`, () => setData(before));
+  };
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(notice ? { text: notice } : null);
@@ -462,7 +486,7 @@ export default function App({ initial, notice }: {
     ...(book === 'business' ? [] : [{ label: 'Add income', icon: 'arrow-in' as const, tone: 'in' as const, onClick: () => openAdd('income') }]),
     ...(store.settings.business ? [{ label: book === 'business' ? 'Pay yourself' : 'Move money between sides', icon: 'transactions' as const, tone: 'save' as const, onClick: () => setPaying(true) }] : []),
     ...(settings.currency ? [{ label: 'Move to savings', icon: 'savings' as const, tone: 'save' as const, onClick: () => navigate('savings') }] : []),
-    { label: 'New money box', icon: 'plus', onClick: () => navigate('budgets') },
+    { label: 'New money box', icon: 'plus', onClick: () => setBoxForm({}) },
   ];
   const payYourself = (tr: { from: Book; to: Book; amount: number; date: string; note: string }) => {
     const before = store;
@@ -960,7 +984,8 @@ export default function App({ initial, notice }: {
               plan={currentPlan}
               top={<>{setupGuide}{sampleBanner}{alertBanner}</>}
               onAdd={(type, category) => openAdd(type, false, category)}
-              onEditBoxes={() => navigate('budgets')}
+              onNewBox={() => setBoxForm({})}
+              onEditBox={(category, limit) => setBoxForm({ editing: { category, limit } })}
               onPay={store.settings.business ? () => setPaying(true) : undefined}
               onSort={(id, b) => {
                 const before = store;
@@ -1157,6 +1182,23 @@ export default function App({ initial, notice }: {
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
         />
+        <Modal
+          open={boxForm != null}
+          onClose={() => setBoxForm(null)}
+          title={boxForm?.editing ? `Edit ${boxForm.editing.category}` : `New money box${store.settings.business ? ` · ${bookName(book)}` : ''}`}
+        >
+          {boxForm && (
+            <BoxForm
+              key={boxForm.editing?.category ?? 'new'}
+              editing={boxForm.editing}
+              categories={settings.expenseCategories}
+              boxes={Object.keys(budgets).filter((k) => budgets[k] > 0)}
+              onSave={saveBox}
+              onRemove={boxForm.editing ? () => removeBox(boxForm.editing!.category) : undefined}
+              onCancel={() => setBoxForm(null)}
+            />
+          )}
+        </Modal>
         <Modal open={paying} onClose={() => setPaying(false)} title="Move money between your sides">
           {paying && (
             <PayYourself

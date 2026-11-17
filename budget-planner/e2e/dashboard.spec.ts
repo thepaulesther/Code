@@ -122,3 +122,48 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   });
 }
+
+test('a money box can be added, changed and removed from the dashboard', async ({ page, seed, pageErrors }) => {
+  await seed(sampleData());
+  await page.goto('/');
+  await page.locator('.dash-tile', { hasText: 'New box' }).click();
+  await page.click('dialog[open] .chips button:has-text("Transport")');
+  await page.fill('#box-amount', '100');
+  await page.click('dialog[open] button[type="submit"]');
+  const tile = page.locator('.dash-tile', { hasText: 'Transport' });
+  await expect(tile).toBeVisible();
+  expect((await stored(page)).budgets.Transport).toBe(100);
+
+  // A brand-new name becomes a category and a box.
+  await page.locator('.dash-tile', { hasText: 'New box' }).click();
+  await page.fill('#box-name', 'Data');
+  await page.fill('#box-amount', '30');
+  await page.click('dialog[open] button[type="submit"]');
+  await expect(page.locator('.dash-tile', { hasText: 'Data' })).toBeVisible();
+  const d = await stored(page);
+  expect(d.budgets.Data).toBe(30);
+  expect(d.settings.expenseCategories).toContain('Data');
+
+  // An existing box can't be added twice.
+  await page.locator('.dash-tile', { hasText: 'New box' }).click();
+  await page.fill('#box-name', 'transport');
+  await page.fill('#box-amount', '5');
+  await page.click('dialog[open] button[type="submit"]');
+  await expect(page.locator('dialog[open] .error')).toContainText('already');
+  await page.keyboard.press('Escape');
+
+  await tile.click();
+  await page.click('.dash-detail button:has-text("Edit")');
+  await page.fill('#box-amount', '120');
+  await page.click('dialog[open] button:has-text("Save changes")');
+  expect((await stored(page)).budgets.Transport).toBe(120);
+
+  // Its details are still open after saving.
+  await expect(tile).toHaveAttribute('aria-expanded', 'true');
+  await page.click('.dash-detail button:has-text("Edit")');
+  await page.click('dialog[open] button:has-text("Remove box")');
+  await page.click('dialog[open] .confirm-row button:has-text("Remove box")');
+  await expect(tile).toHaveCount(0);
+  expect((await stored(page)).budgets.Transport).toBeUndefined();
+  expect(pageErrors).toEqual([]);
+});
