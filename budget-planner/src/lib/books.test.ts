@@ -20,7 +20,7 @@ import {
 } from './books';
 import { effectiveInMonth, totals } from './budget';
 import { currencyDigits, fromMinor, toMinor } from './money';
-import { applyRecurringAll, changeStoreCurrency, completeStore, defaultSettings, type AppData } from './store';
+import { applyRecurringAll, boxRule, changeStoreCurrency, completeStore, defaultSettings, saveBox, type AppData } from './store';
 
 const v2 = (): AppData => ({
   version: 2,
@@ -219,5 +219,38 @@ describe('across both books', () => {
     s = mergeView(s, 'business', { ...biz, recurring: [{ id: 'rb', type: 'expense', amount: 150_000, category: 'Staff pay', note: 'Staff', day: 1, startMonth: '2026-11' }] });
     const next = applyRecurringAll(s, '2026-11-17');
     expect(next.books.business.transactions.some((t) => t.recurringId === 'rb')).toBe(true);
+  });
+});
+
+describe('money boxes with a repeating bill', () => {
+  const base = (): AppData => ({ ...v2(), recurring: [], transactions: [] });
+
+  it('creates the box, the category and a bill that starts on its next day', () => {
+    // Day 20 is still to come on the 17th: the first payment is this month, nothing is added yet.
+    let d = saveBox(base(), 'School fees', 150_000, { amount: 150_000, day: 20, every: 12 }, '2026-11-17');
+    expect(d.budgets['School fees']).toBe(150_000);
+    expect(d.settings.expenseCategories).toContain('School fees');
+    expect(boxRule(d, 'School fees')).toMatchObject({ amount: 150_000, day: 20, everyMonths: 12, startMonth: '2026-11' });
+    expect(d.transactions).toHaveLength(0);
+    // A day already gone starts next month, so a bill already paid isn't recorded twice.
+    d = saveBox(base(), 'Data', 10_000, { amount: 10_000, day: 5, every: 1 }, '2026-11-17');
+    expect(boxRule(d, 'Data')?.startMonth).toBe('2026-12');
+  });
+
+  it('adds today’s payment when the bill is due today', () => {
+    const d = saveBox(base(), 'Gym', 20_000, { amount: 20_000, day: 17, every: 1 }, '2026-11-17');
+    expect(d.transactions).toMatchObject([{ category: 'Gym', amount: 20_000, date: '2026-11-17' }]);
+  });
+
+  it('changes an existing bill, and stops it while keeping its payments', () => {
+    let d = saveBox(base(), 'Gym', 20_000, { amount: 20_000, day: 17, every: 1 }, '2026-11-17');
+    const id = boxRule(d, 'Gym')!.id;
+    d = saveBox(d, 'Gym', 25_000, { amount: 25_000, day: 1, every: 1 }, '2026-11-17');
+    expect(boxRule(d, 'Gym')).toMatchObject({ id, amount: 25_000, day: 1 });
+    expect(d.recurring).toHaveLength(1);
+    d = saveBox(d, 'Gym', 25_000, null, '2026-11-17');
+    expect(boxRule(d, 'Gym')).toBeUndefined();
+    expect(d.transactions).toHaveLength(1);
+    expect(d.budgets.Gym).toBe(25_000);
   });
 });

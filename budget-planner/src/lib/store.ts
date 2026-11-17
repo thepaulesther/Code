@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
+  shiftMonth,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
   monthOf,
@@ -474,6 +475,47 @@ export function changeStoreCurrency(s: Store, newBase: string, mode: 'convert' |
   const convert = mode === 'convert' && !!oldBase;
   const transfers = convert ? s.transfers.map((t) => ({ ...t, amount: round2(t.amount * rate) })) : s.transfers;
   return { ...next, unsorted, transfers };
+}
+
+/* ---------- Money boxes ---------- */
+
+/** A repeating bill for a money box: its amount, day of the month, and every month or every year. */
+export interface BoxRepeat {
+  amount: number;
+  day: number;
+  every: 1 | 12;
+}
+
+/** The active repeating bill that fills a money box (same category), if any. */
+export const boxRule = (d: AppData, category: string) =>
+  d.recurring.find((r) => r.type === 'expense' && r.category === category && !r.paused);
+
+/**
+ * Create or change a money box: its monthly limit and, optionally, the bill that repeats in it.
+ * - A new name also becomes a spending category.
+ * - With `repeat`, the box's bill is created or changed. A new bill starts this month if its day is
+ *   still to come, otherwise next month, so nothing already paid is recorded twice.
+ * - Without it, an existing bill stops; its past payments stay.
+ */
+export function saveBox(d: AppData, name: string, limit: number, repeat: BoxRepeat | null, today: string): AppData {
+  let x = d.settings.expenseCategories.includes(name) ? d : addCategory(d, 'expense', name);
+  x = { ...x, budgets: { ...x.budgets, [name]: limit } };
+  const existing = boxRule(x, name);
+  if (!repeat) return existing ? stopRule(x, existing.id, false) : x;
+  if (existing) {
+    const r: RecurringRule = { ...existing, amount: repeat.amount, day: repeat.day };
+    // The amount is entered in the base currency.
+    delete r.currency;
+    delete r.rate;
+    if (repeat.every === 12) r.everyMonths = 12;
+    else delete r.everyMonths;
+    return { ...x, recurring: x.recurring.map((y) => (y.id === existing.id ? r : y)) };
+  }
+  const month = monthOf(today);
+  const startMonth = repeat.day >= Number(today.slice(8, 10)) ? month : shiftMonth(month, 1);
+  const rule: RecurringRule = { id: newId(), type: 'expense', amount: repeat.amount, category: name, note: name, day: repeat.day, startMonth };
+  if (repeat.every === 12) rule.everyMonths = 12;
+  return applyRecurring({ ...x, recurring: [...x.recurring, rule] }, today);
 }
 
 /* ---------- Categories ---------- */

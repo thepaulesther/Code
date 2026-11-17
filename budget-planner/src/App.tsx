@@ -47,7 +47,9 @@ import {
   removeSamples,
   saveGoal,
   stopRule,
-  addCategory,
+  boxRule,
+  saveBox as saveBoxIn,
+  type BoxRepeat,
   changeStoreCurrency,
   encodeForSave,
   applyRecurringAll,
@@ -179,15 +181,13 @@ export default function App({ initial, notice }: {
   const [paying, setPaying] = useState(false);
   // The money box form: {} for a new box, or the box being changed.
   const [boxForm, setBoxForm] = useState<{ editing?: { category: string; limit: number } } | null>(null);
-  const saveBox = (name: string, amount: number) => {
+  const saveBox = (name: string, amount: number, repeat: BoxRepeat | null) => {
     const before = data;
     const isNew = !boxForm?.editing;
-    setData((d) => {
-      const withCategory = d.settings.expenseCategories.includes(name) ? d : addCategory(d, 'expense', name);
-      return { ...withCategory, budgets: { ...withCategory.budgets, [name]: amount } };
-    });
+    setData((d) => saveBoxIn(d, name, amount, repeat, todayISO()));
     setBoxForm(null);
-    setToast(isNew ? `Added the ${name} box: ${money(amount)} a month.` : `${name} now holds ${money(amount)} a month.`, () => setData(before));
+    const bill = repeat ? ` A ${money(repeat.amount)} bill repeats ${repeat.every === 12 ? 'yearly' : 'monthly'} on day ${repeat.day}.` : '';
+    setToast((isNew ? `Added the ${name} box: ${money(amount)} a month.` : `${name} now holds ${money(amount)} a month.`) + bill, () => setData(before));
   };
   const removeBox = (name: string) => {
     const before = data;
@@ -1191,6 +1191,11 @@ export default function App({ initial, notice }: {
             <BoxForm
               key={boxForm.editing?.category ?? 'new'}
               editing={boxForm.editing}
+              repeat={(() => {
+                const r = boxForm.editing && boxRule(data, boxForm.editing.category);
+                return r ? { amount: r.amount, day: r.day, every: r.everyMonths === 12 ? 12 : 1 } : undefined;
+              })()}
+              today={today}
               categories={settings.expenseCategories}
               boxes={Object.keys(budgets).filter((k) => budgets[k] > 0)}
               onSave={saveBox}

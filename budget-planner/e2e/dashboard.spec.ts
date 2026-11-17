@@ -160,6 +160,21 @@ test('a money box can be added, changed and removed from the dashboard', async (
 
   // Its details are still open after saving.
   await expect(tile).toHaveAttribute('aria-expanded', 'true');
+
+  // A repeating bill can be added from Edit, and shows in the box.
+  await page.click('.dash-detail button:has-text("Edit")');
+  await page.check('#box-repeats');
+  await page.fill('#box-bill', '45');
+  await page.selectOption('#box-day', '28');
+  await page.click('dialog[open] button:has-text("Save changes")');
+  await expect(page.locator('.dash-detail')).toContainText('Yes, a monthly bill is set up');
+  expect((await stored(page)).recurring.find((r: { category: string }) => r.category === 'Transport')).toMatchObject({ amount: 45, day: 28 });
+  await page.click('.dash-detail button:has-text("Edit")');
+  await expect(page.locator('#box-repeats')).toBeChecked();
+  await expect(page.locator('#box-day')).toHaveValue('28');
+  await page.uncheck('#box-repeats');
+  await page.click('dialog[open] button:has-text("Save changes")');
+  await expect(page.locator('.dash-detail')).toContainText('no repeating bill');
   await page.click('.dash-detail button:has-text("Edit")');
   await page.click('dialog[open] button:has-text("Remove box")');
   await page.click('dialog[open] .confirm-row button:has-text("Remove box")');
