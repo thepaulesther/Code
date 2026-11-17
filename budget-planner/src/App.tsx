@@ -539,6 +539,7 @@ export default function App({ initial, notice }: {
   );
 
   const hasCurrency = !!settings.currency;
+  const biz = book === 'business';
   const setupSteps: SetupStep[] = [
     {
       id: 'currency',
@@ -548,39 +549,61 @@ export default function App({ initial, notice }: {
       optional: false,
       content: <CurrencySelect id="welcome-currency" label="Base currency" value={settings.currency} onChange={chooseBase} />,
     },
-    {
-      id: 'income',
-      title: 'Add your income',
-      detail: 'Your salary or any other money coming in. Set it to repeat if it arrives every month.',
-      done: transactions.some((x) => x.type === 'income'),
-      optional: true,
-      action: { label: 'Add income', onClick: () => setAdding('income'), disabled: !hasCurrency },
-    },
-    {
-      id: 'expense',
-      title: 'Record your spending',
-      detail: (
-        <>
-          Start with the big ones: rent, bills, groceries. Rent paid once a year? Choose <strong>Repeats: Every year</strong>{' '}
-          and it counts as a twelfth in each month.
-        </>
-      ),
-      done: transactions.some((x) => x.type === 'expense'),
-      optional: true,
-      action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
-    },
+    biz
+      ? {
+          id: 'income',
+          title: 'Record a sale',
+          detail: 'Money your business takes in: cash, transfer or POS. Record a day’s sales as one entry if that’s easier.',
+          done: transactions.some((x) => x.type === 'income'),
+          optional: true,
+          action: { label: 'Record sale', onClick: () => setAdding('income'), disabled: !hasCurrency },
+        }
+      : {
+          id: 'income',
+          title: 'Add your income',
+          detail: 'Your salary or any other money coming in. Set it to repeat if it arrives every month.',
+          done: transactions.some((x) => x.type === 'income'),
+          optional: true,
+          action: { label: 'Add income', onClick: () => setAdding('income'), disabled: !hasCurrency },
+        },
+    biz
+      ? {
+          id: 'expense',
+          title: 'Record a business expense',
+          detail: 'Stock, shop rent, staff pay, delivery. Set rent and staff pay to repeat so they’re added on their day.',
+          done: transactions.some((x) => x.type === 'expense'),
+          optional: true,
+          action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
+        }
+      : {
+          id: 'expense',
+          title: 'Record your spending',
+          detail: (
+            <>
+              Start with the big ones: rent, bills, groceries. Rent paid once a year? Choose <strong>Repeats: Every year</strong>{' '}
+              and it counts as a twelfth in each month.
+            </>
+          ),
+          done: transactions.some((x) => x.type === 'expense'),
+          optional: true,
+          action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
+        },
     {
       id: 'budgets',
-      title: 'Set monthly budgets',
-      detail: 'Pick limits for the categories you want to keep an eye on.',
+      title: biz ? 'Set up business boxes' : 'Set up money boxes',
+      detail: biz
+        ? 'Monthly limits for stock, shop rent, staff pay and delivery, so you see what’s left at a glance.'
+        : 'Monthly limits for rent, groceries, transport and anything else you want to keep an eye on.',
       done: Object.keys(budgets).length > 0,
       optional: true,
-      action: { label: 'Set budgets', onClick: () => navigate('budgets'), disabled: !hasCurrency },
+      action: { label: 'Add a box', onClick: () => setBoxForm({}), disabled: !hasCurrency },
     },
     {
       id: 'goal',
-      title: 'Set a savings goal',
-      detail: 'An emergency fund of about three months of spending is a good first goal.',
+      title: biz ? 'Set a business savings goal' : 'Set a savings goal',
+      detail: biz
+        ? 'Money for new equipment, a slow month or expanding the shop.'
+        : 'An emergency fund of about three months of spending is a good first goal.',
       done: goals.length > 0,
       optional: true,
       action: { label: 'Add a goal', onClick: () => setGoalDialog('new'), disabled: !hasCurrency },
@@ -588,7 +611,14 @@ export default function App({ initial, notice }: {
   ];
   const showSetup = !setup.prefs.hidden && !setupSteps.every((x) => x.done);
   const setupGuide = showSetup && (
-    <SetupGuide steps={setupSteps} skipped={setup.prefs.skipped} onSkip={setup.skip} onUnskip={setup.unskip} onHide={setup.hide} />
+    <SetupGuide
+      title={biz ? 'Set up your business' : 'Set up Elora'}
+      steps={setupSteps}
+      skipped={setup.prefs.skipped}
+      onSkip={setup.skip}
+      onUnskip={setup.unskip}
+      onHide={setup.hide}
+    />
   );
 
   // On the Overview the quick actions already offer "Add"; the floating button appears once they scroll away.

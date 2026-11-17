@@ -182,3 +182,16 @@ test('a money box can be added, changed and removed from the dashboard', async (
   expect((await stored(page)).budgets.Transport).toBeUndefined();
   expect(pageErrors).toEqual([]);
 });
+
+test('the Business side has its own setup steps', async ({ page, seed }) => {
+  await seed(withUnsorted());
+  await page.goto('/');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  const guide = page.locator('.setup');
+  await expect(guide.locator('#setup-title')).toContainText('Set up your business');
+  await expect(guide).toContainText('Record a sale');
+  await expect(guide).not.toContainText('Add your income');
+  await guide.locator('button:has-text("Record sale")').click();
+  await expect(page.locator('dialog[open] [role="radio"][aria-checked="true"]')).toHaveText(/Income/);
+  await expect(page.locator('dialog[open] .adding-to')).toContainText('Business');
+});
