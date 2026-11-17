@@ -22,9 +22,10 @@ export function conversionRate(cache: RateCache | undefined, from: string, to: s
 }
 
 /** Common currencies first in pickers, including ones popular with remote workers. */
+/** Shown first in currency menus: Nigeria first, then Africa's other main currencies, then the most traded. */
 export const COMMON_CURRENCIES = [
-  'USD', 'EUR', 'GBP', 'NGN', 'JPY', 'CAD', 'AUD', 'INR', 'CNY', 'GHS',
-  'KES', 'ZAR', 'EGP', 'AED', 'CHF', 'BRL', 'MXN', 'PHP', 'PKR', 'SGD',
+  'NGN', 'GHS', 'KES', 'ZAR', 'EGP', 'USD', 'EUR', 'GBP', 'JPY', 'CAD',
+  'AUD', 'INR', 'CNY', 'AED', 'CHF', 'BRL', 'MXN', 'PHP', 'PKR', 'SGD',
 ];
 
 let allCache: string[] | null = null;
