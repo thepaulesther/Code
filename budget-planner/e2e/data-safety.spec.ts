@@ -41,7 +41,7 @@ test.describe('data Elora can’t use safely is never overwritten', () => {
     const text = JSON.stringify(upgradeV2toV3(sampleData()));
     await seed(text);
     await page.goto('/');
-    await expect(page.locator('.hero')).toBeVisible();
+    await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
     expect(await raw(page)).toBe(text);
   });
 

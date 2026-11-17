@@ -113,7 +113,11 @@ export const stored = async (page: Page, book: Book = 'personal') => {
 export async function openAdd(page: Page, kind: 'expense' | 'income' = 'expense') {
   const quick = page.locator(`button.qa:has-text("Add ${kind}")`);
   if (await quick.isVisible()) return quick.click();
-  if (isPhone(page)) await page.click('.fab');
+  if (isPhone(page)) {
+    await page.click('.fab');
+    // The + opens a short menu of add options.
+    await page.click('.add-menu-list button:has-text("Add expense")');
+  }
   else await page.click('.page-actions .btn-primary:has-text("Add transaction")');
   if (kind === 'income') await page.click('dialog[open] [role="radio"]:has-text("Income")');
 }

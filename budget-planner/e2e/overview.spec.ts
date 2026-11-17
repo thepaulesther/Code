@@ -59,7 +59,7 @@ test.describe('Upcoming', () => {
   test('near the month end it shows the rest of the month and early next month, with this month’s total only', async ({ page, seed }) => {
     await at(page, '2026-11-28');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     const card = page.locator('.coming-up');
     const later = card.locator('.coming-up-group', { hasText: 'Later this month' });
     await expect(later).toContainText('Electricity');
@@ -79,7 +79,7 @@ test.describe('Upcoming', () => {
   test('says when nothing else is due, and shows today’s automatic payments', async ({ page, seed }) => {
     await at(page, '2026-11-30');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     const card = page.locator('.coming-up');
     await expect(card.locator('.coming-up-group', { hasText: 'Added today' })).toContainText('Electricity');
     await expect(card).toContainText('Nothing else due this month.');
@@ -89,7 +89,7 @@ test.describe('Upcoming', () => {
   test('with no repeating items it offers to add one, already set to repeat', async ({ page, seed }) => {
     await at(page, '2026-11-14');
     await seed(data({ recurring: [] }));
-    await page.goto('/');
+    await page.goto('/#/overview');
     await page.click('.coming-up button:has-text("Add a repeating bill")');
     await expect(page.locator('dialog[open] #tx-repeat')).toHaveValue('1');
     await page.keyboard.press('Escape');
@@ -103,7 +103,7 @@ test.describe('Month-end check-in', () => {
   test('left-over money goes to goals, dated the last day of that month, and can be undone', async ({ page, seed }) => {
     await at(page, '2026-11-03');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     const card = page.locator('.month-end');
     await expect(card.locator('h2')).toHaveText(/^You finished October with ₦50,000(\.00)? left over$/);
     await card.getByRole('button', { name: 'Add to goals' }).click();
@@ -128,7 +128,7 @@ test.describe('Month-end check-in', () => {
   test('“Not now” hides it for that month, after a reload too; looking back at October still offers it', async ({ page, seed }) => {
     await at(page, '2026-11-02');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     await page.locator('.month-end').getByRole('button', { name: 'Not now' }).click();
     await expect(page.locator('.month-end')).toHaveCount(0);
     await page.reload();
@@ -142,7 +142,7 @@ test.describe('Month-end check-in', () => {
   test('is only offered in the first week of the month', async ({ page, seed }) => {
     await at(page, '2026-11-08');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     await expect(page.locator('.hero')).toBeVisible();
     await expect(page.locator('.month-end')).toHaveCount(0);
   });
@@ -152,7 +152,7 @@ test.describe('Month-end check-in', () => {
     const over = data();
     over.transactions.push(tx('Repairs', 'expense', 62_000, 'Other', '2026-10-20'));
     await seed(over);
-    await page.goto('/');
+    await page.goto('/#/overview');
     const card = page.locator('.month-end.over');
     await expect(card.locator('h2')).toHaveText(/^October ended ₦12,000(\.00)? over$/);
     await card.getByRole('button', { name: 'See October’s spending' }).click();
@@ -163,7 +163,7 @@ test.describe('Month-end check-in', () => {
   test('with no goals yet it offers to create one', async ({ page, seed }) => {
     await at(page, '2026-11-03');
     await seed(data({ goals: [] }));
-    await page.goto('/');
+    await page.goto('/#/overview');
     await page.locator('.month-end').getByRole('button', { name: 'Create a goal' }).click();
     await expect(page.locator('dialog[open] #goal-target')).toBeVisible();
   });
@@ -173,7 +173,7 @@ test.describe('Customise Overview', () => {
   test('sections can be moved and hidden by keyboard; the choice survives a reload and can be reset', async ({ page, seed }) => {
     await at(page, '2026-11-14');
     await seed(data());
-    await page.goto('/');
+    await page.goto('/#/overview');
     await expect(page.locator('.coming-up')).toBeVisible();
     const defaults = await sectionOrder(page);
     expect(defaults.slice(0, 2)).toEqual(['Coming up', 'Budgets this month']);
@@ -209,7 +209,7 @@ test.describe('Customise Overview', () => {
     await at(page, '2026-11-14');
     await seed(data());
     await page.addInitScript(() => localStorage.setItem('elora.layout', '{"order": 7, "hidden": ["nope"]'));
-    await page.goto('/');
+    await page.goto('/#/overview');
     await expect(page.locator('.coming-up')).toBeVisible();
     expect((await sectionOrder(page)).slice(0, 2)).toEqual(['Coming up', 'Budgets this month']);
   });
@@ -227,7 +227,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`the new Overview cards and the customise dialog meet WCAG 2.2 AA (${theme})`, async ({ page, seed }) => {
     await at(page, '2026-11-28');
     await seed(data({ settings: { ...settings, theme } }));
-    await page.goto('/');
+    await page.goto('/#/overview');
     await expect(page.locator('.coming-up')).toBeVisible();
     const found = await axe(page);
     await page.clock.setSystemTime(new Date('2026-12-03T10:00:00'));

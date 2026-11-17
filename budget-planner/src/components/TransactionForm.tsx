@@ -47,6 +47,7 @@ export function TransactionForm({
   editing,
   initialType,
   initialRepeat,
+  initialCategory,
   bare,
 }: {
   expenseCategories: string[];
@@ -63,6 +64,8 @@ export function TransactionForm({
   editing?: Transaction;
   /** Start on Expense or Income (e.g. from an "Add income" button). */
   initialType?: TxType;
+  /** Start with this category chosen (e.g. "Add expense" from a money box). */
+  initialCategory?: string;
   /** Start set to repeat (e.g. from "Add a repeating bill"). */
   initialRepeat?: RepeatEvery;
   /** Render without the card and heading, for use inside a dialog. */
@@ -77,7 +80,7 @@ export function TransactionForm({
   const currency = chosenCurrency ?? base;
   const [rateText, setRateText] = useState<string | null>(editing?.original ? String(editing.original.rate) : null); // null = market rate
   const [category, setCategory] = useState(
-    editing?.category ?? (initialType === 'income' ? (incomeCategories[0] ?? '') : 'Groceries'),
+    editing?.category ?? initialCategory ?? (initialType === 'income' ? (incomeCategories[0] ?? '') : 'Groceries'),
   );
   const [note, setNote] = useState(editing?.note ?? '');
   const [date, setDate] = useState(editing?.date ?? todayISO());

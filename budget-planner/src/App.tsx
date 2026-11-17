@@ -9,6 +9,7 @@ import { Modal } from './components/Modal';
 import { TransactionForm, type RepeatEvery, type SubmitOptions } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
+  appLocale,
   setAppLocale,
   budgetStatus,
   effectiveInMonth,
@@ -52,7 +53,7 @@ import {
   useStore,
   useToday,
 } from './lib/store';
-import { activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
+import { addTransfer, addUnsorted, bookBalance, sortInto, splitUnsorted, activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
 import { PlanCard, PlanGlossary } from './components/PlanCard';
@@ -74,7 +75,9 @@ import { arrangeRows, useLayoutPrefs, type SectionId } from './lib/layout';
 import { MonthEndCard } from './components/overview/MonthEndCard';
 import { CustomiseOverview } from './components/overview/CustomiseOverview';
 import { ComingUp } from './components/overview/ComingUp';
-import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
+import { AddMenu, Main, MobileTopBar, MoreSheet, Sidebar, TabBar, type AddMenuItem } from './components/layout/AppShell';
+import { Dashboard } from './components/dashboard/Dashboard';
+import { PayYourself } from './components/dashboard/PayYourself';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
 import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
@@ -116,6 +119,7 @@ const greeting = () => {
 };
 
 const PAGE_TITLES: Record<Route, string> = {
+  dashboard: 'Dashboard',
   overview: 'Overview',
   transactions: 'Transactions',
   budgets: 'Budgets',
@@ -163,10 +167,14 @@ export default function App({ initial, notice }: {
   const [adding, setAdding] = useState<TxType | null>(null);
   // "Add a repeating bill" opens the form already set to repeat monthly.
   const [addingRepeat, setAddingRepeat] = useState(false);
-  const openAdd = (type: TxType | null, repeat = false) => {
+  // "Add expense" from a money box starts on that box's category.
+  const [addingCategory, setAddingCategory] = useState<string | undefined>(undefined);
+  const openAdd = (type: TxType | null, repeat = false, category?: string) => {
     setAddingRepeat(repeat);
+    setAddingCategory(category);
     setAdding(type);
   };
+  const [paying, setPaying] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToastState] = useState<{ text: string; undo?: () => void } | null>(notice ? { text: notice } : null);
@@ -392,6 +400,14 @@ export default function App({ initial, notice }: {
   };
 
   const importTxs = (txs: Transaction[]) => {
+    // With business mode on, imported rows wait on the Dashboard to be sorted into Personal or Business.
+    if (store.settings.business) {
+      setStore((s) => addUnsorted(s, txs));
+      setDialog(null);
+      navigate('dashboard');
+      setToast(`Imported ${txs.length} ${txs.length === 1 ? 'payment' : 'payments'}. Sort ${txs.length === 1 ? 'it' : 'them'} into Personal or Business on the Dashboard.`);
+      return;
+    }
     setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
     const latest = txs.reduce((m, x) => (x.date > m ? x.date : m), '');
     if (latest) setMonth(monthOf(latest));
@@ -405,7 +421,7 @@ export default function App({ initial, notice }: {
   // Comparing with the previous route (not a "first run" flag) keeps StrictMode's double effect harmless.
   const prevRoute = useRef(route);
   useEffect(() => {
-    document.title = route === 'overview' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
+    document.title = route === 'dashboard' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
     if (prevRoute.current === route) return;
     prevRoute.current = route;
     window.scrollTo(0, 0);
@@ -438,6 +454,21 @@ export default function App({ initial, notice }: {
     setRestoring(null);
     setMonth(CURRENT_MONTH);
     setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setStore(before));
+  };
+
+  const addMenuItems: AddMenuItem[] = [
+    ...(book === 'business' ? [{ label: 'Record sale', icon: 'tag' as const, tone: 'in' as const, onClick: () => openAdd('income') }] : []),
+    { label: 'Add expense', icon: 'arrow-out', tone: 'out', onClick: () => openAdd('expense') },
+    ...(book === 'business' ? [] : [{ label: 'Add income', icon: 'arrow-in' as const, tone: 'in' as const, onClick: () => openAdd('income') }]),
+    ...(store.settings.business ? [{ label: book === 'business' ? 'Pay yourself' : 'Move money between sides', icon: 'transactions' as const, tone: 'save' as const, onClick: () => setPaying(true) }] : []),
+    ...(settings.currency ? [{ label: 'Move to savings', icon: 'savings' as const, tone: 'save' as const, onClick: () => navigate('savings') }] : []),
+    { label: 'New money box', icon: 'plus', onClick: () => navigate('budgets') },
+  ];
+  const payYourself = (tr: { from: Book; to: Book; amount: number; date: string; note: string }) => {
+    const before = store;
+    setStore((s) => addTransfer(s, tr));
+    setPaying(false);
+    setToast(`Moved ${money(tr.amount)} from ${bookName(tr.from)} to ${bookName(tr.to)}.`, () => setStore(before));
   };
 
   const chooseBase = (c: string) => setStore((s) => changeStoreCurrency(s, c, 'relabel'));
@@ -912,6 +943,43 @@ export default function App({ initial, notice }: {
           </>
         );
 
+      case 'dashboard':
+        return (
+          <>
+            <PageHeader
+              eyebrow={new Date().toLocaleDateString(appLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+              title={greeting()}
+              subtitle={store.settings.business ? `${bookName(book)} money this month.` : 'Your money this month.'}
+              actions={addButton}
+            />
+            <Dashboard
+              store={store}
+              book={book}
+              view={data}
+              today={today}
+              plan={currentPlan}
+              top={<>{setupGuide}{sampleBanner}{alertBanner}</>}
+              onAdd={(type, category) => openAdd(type, false, category)}
+              onEditBoxes={() => navigate('budgets')}
+              onPay={store.settings.business ? () => setPaying(true) : undefined}
+              onSort={(id, b) => {
+                const before = store;
+                const item = store.unsorted.find((u) => u.id === id);
+                setStore((s) => sortInto(s, id, b));
+                setToast(`${item?.note || item?.category || 'Payment'} moved to ${bookName(b)}.`, () => setStore(before));
+              }}
+              onSplit={(id, part) => {
+                const before = store;
+                setStore((s) => splitUnsorted(s, id, part));
+                setToast('Split between Business and Personal.', () => setStore(before));
+              }}
+              seeTransactions={hrefFor('transactions')}
+              seeSavings={hrefFor('savings')}
+              seePlan={hrefFor('plans')}
+            />
+          </>
+        );
+
       case 'settings':
         return (
           <>
@@ -927,7 +995,7 @@ export default function App({ initial, notice }: {
               onReset={() => {
                 setup.reset();
                 layout.reset();
-                navigate('overview');
+                navigate('dashboard');
               }}
               onExport={() => setDialog('export')}
               onBackup={backup}
@@ -940,7 +1008,7 @@ export default function App({ initial, notice }: {
               setupHidden={setup.prefs.hidden}
               onShowSetup={() => {
                 setup.show();
-                navigate('overview');
+                navigate('dashboard');
               }}
               onCustomiseOverview={() => setCustomising(true)}
               data={data}
@@ -957,7 +1025,7 @@ export default function App({ initial, notice }: {
           <>
             {/* ---- Overview ---- */}
             <PageHeader
-              eyebrow={new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+              eyebrow={new Date().toLocaleDateString(appLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
               title={greeting()}
               subtitle={
                 !hasAnyTransactions
@@ -1076,7 +1144,7 @@ export default function App({ initial, notice }: {
           <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
         </Main>
         <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
-        {route !== 'settings' && !quickActionsVisible && <AddFab onClick={() => setAdding('expense')} />}
+        {route !== 'settings' && !quickActionsVisible && <AddMenu items={addMenuItems} />}
 
         <MoreSheet
           open={moreOpen}
@@ -1089,13 +1157,32 @@ export default function App({ initial, notice }: {
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
         />
-        <Modal open={adding != null} onClose={() => openAdd(null)} title="Add transaction">
+        <Modal open={paying} onClose={() => setPaying(false)} title="Move money between your sides">
+          {paying && (
+            <PayYourself
+              balances={{ personal: bookBalance(store, 'personal', CURRENT_MONTH), business: bookBalance(store, 'business', CURRENT_MONTH) }}
+              onSave={payYourself}
+              onCancel={() => setPaying(false)}
+            />
+          )}
+        </Modal>
+        <Modal
+          open={adding != null}
+          onClose={() => openAdd(null)}
+          title={store.settings.business ? `Add to ${bookName(book)}` : 'Add transaction'}
+        >
+          {adding && store.settings.business && (
+            <p className={book === 'business' ? 'adding-to is-business' : 'adding-to'}>
+              Adding to <strong>{bookName(book)}</strong>. Switch at the top of the page to add to {bookName(book === 'business' ? 'personal' : 'business')} instead.
+            </p>
+          )}
           {adding && (
             <TransactionForm
-              key={`${adding}-${addingRepeat}`}
+              key={`${adding}-${addingRepeat}-${addingCategory ?? ''}`}
               bare
               initialType={adding}
               initialRepeat={addingRepeat ? 1 : 0}
+              initialCategory={addingCategory}
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
               rates={data.rates}
