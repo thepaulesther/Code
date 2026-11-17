@@ -21,6 +21,8 @@ export interface Transaction {
   sample?: boolean;
   /** Set on both parts of a payment split between the Personal and Business books. */
   splitId?: string;
+  /** How a sale or payment was made, when known: cash, bank transfer or POS. */
+  method?: 'cash' | 'transfer' | 'pos';
 }
 
 /** One-off example transactions: category, note and day of month (for recognising older saved examples). */

@@ -1589,3 +1589,10 @@ a { color: var(--accent-text); }
 .box-repeat { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .box-repeat-fields { display: flex; flex-direction: column; gap: var(--space-3); }
 .box-repeat-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-3); }
+.dash-today { margin: 0; font-size: var(--text-sm); color: var(--hero-muted); }
+.dash-today strong { color: var(--hero-text); font-weight: 600; }
+.alert-results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.alert-results > li { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); }
+.alert-results .check > span { flex: 1; min-width: 0; }
+.alert-line { display: flex; justify-content: space-between; gap: var(--space-3); }
+.alert-line .in { color: var(--income); }

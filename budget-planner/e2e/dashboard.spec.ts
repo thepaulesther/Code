@@ -192,6 +192,56 @@ test('the Business side has its own setup steps', async ({ page, seed }) => {
   await expect(guide).toContainText('Record a sale');
   await expect(guide).not.toContainText('Add your income');
   await guide.locator('button:has-text("Record sale")').click();
-  await expect(page.locator('dialog[open] [role="radio"][aria-checked="true"]')).toHaveText(/Income/);
-  await expect(page.locator('dialog[open] .adding-to')).toContainText('Business');
+  await expect(page.locator('dialog[open] #sale-amount')).toBeVisible();
+});
+
+test('a sale is recorded in one step, remembering how it was paid', async ({ page, seed, pageErrors }) => {
+  await seed(withUnsorted());
+  await page.goto('/');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  await page.click('.dash-add-money:has-text("Record sale")');
+  await page.fill('#sale-amount', '4500');
+  await page.click('dialog[open] [role="radio"]:has-text("POS")');
+  await page.fill('#sale-note', '3 bags of rice');
+  await page.click('dialog[open] button[type="submit"]');
+  const sale = (await stored(page, 'business')).transactions.find((t: { note: string }) => t.note === '3 bags of rice');
+  expect(sale).toMatchObject({ type: 'income', amount: 4500, category: 'Sales', method: 'pos', date: new Date().toISOString().slice(0, 10) });
+  await expect(page.locator('[data-testid="sales-today"]')).toContainText('POS');
+
+  // The next sale starts on POS.
+  await page.click('.dash-add-money:has-text("Record sale")');
+  await expect(page.locator('dialog[open] [role="radio"][aria-checked="true"]')).toHaveText('POS');
+  expect(pageErrors).toEqual([]);
+});
+
+test('pasted bank alerts are read, checked and added; duplicates start unticked', async ({ page, seed, pageErrors }) => {
+  await seed(withUnsorted());
+  await page.goto('/');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  await page.click('.dash-add-money:has-text("Record sale")');
+  await page.click('dialog[open] [role="tab"]:has-text("Paste bank alert")');
+  const today = new Date();
+  const d = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
+  await page.fill('#alert-text', `Credit Alert! Amt: NGN45,000.00 Desc: TRF FROM CHIDI OKAFOR Date: ${d} Bal: NGN312,400.00
+
+Your OTP is 1234
+
+Debit Alert Amt: NGN12,500.00 Desc: POS PURCHASE DIESEL Date: ${d}`);
+  const results = page.locator('.alert-results li');
+  await expect(results).toHaveCount(2);
+  await expect(results.first()).toContainText('Chidi Okafor');
+  await expect(page.locator('dialog[open]')).toContainText('left out');
+  await page.click('dialog[open] button:has-text("Add 2 to Business")');
+  const biz = (await stored(page, 'business')).transactions;
+  expect(biz.find((t: { note: string }) => t.note === 'Chidi Okafor')).toMatchObject({ type: 'income', amount: 45_000, category: 'Sales', method: 'transfer' });
+  expect(biz.find((t: { amount: number }) => t.amount === 12_500)).toMatchObject({ type: 'expense', category: 'Other', method: 'pos' });
+
+  // Pasting the same alert again: it looks already recorded, so it starts unticked.
+  await page.click('.fab, .dash-add-money:has-text("Record sale")');
+  if (await page.locator('.add-menu-list').isVisible()) await page.click('.add-menu-list button:has-text("Paste bank alert")');
+  else await page.click('dialog[open] [role="tab"]:has-text("Paste bank alert")');
+  await page.fill('#alert-text', `Credit Alert! Amt: NGN45,000.00 Desc: TRF FROM CHIDI OKAFOR Date: ${d}`);
+  await expect(page.locator('.alert-results li')).toContainText('looks already recorded');
+  await expect(page.locator('.alert-results input[type="checkbox"]')).not.toBeChecked();
+  expect(pageErrors).toEqual([]);
 });

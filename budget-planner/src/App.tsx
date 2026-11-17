@@ -82,6 +82,7 @@ import { AddMenu, Main, MobileTopBar, MoreSheet, Sidebar, TabBar, type AddMenuIt
 import { Dashboard } from './components/dashboard/Dashboard';
 import { PayYourself } from './components/dashboard/PayYourself';
 import { BoxForm } from './components/dashboard/BoxForm';
+import { QuickSale } from './components/dashboard/QuickSale';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
 import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
@@ -179,6 +180,20 @@ export default function App({ initial, notice }: {
     setAdding(type);
   };
   const [paying, setPaying] = useState(false);
+  // Quick sale / pasted bank alerts: which tab the sheet opens on.
+  const [quickSale, setQuickSale] = useState<'enter' | 'paste' | null>(null);
+  const saveQuick = (txs: Transaction[]) => {
+    const before = data;
+    setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
+    setQuickSale(null);
+    const total = txs.reduce((s, x) => s + (x.type === 'income' ? x.amount : 0), 0);
+    setToast(
+      txs.length === 1
+        ? `Recorded ${txs[0].type === 'income' ? '+' : '−'}${money(txs[0].amount)}${txs[0].note ? ` · ${txs[0].note}` : ''}.`
+        : `Added ${txs.length} payments${total ? `, ${money(total)} in` : ''}.`,
+      () => setData(before),
+    );
+  };
   // The money box form: {} for a new box, or the box being changed.
   const [boxForm, setBoxForm] = useState<{ editing?: { category: string; limit: number } } | null>(null);
   const saveBox = (name: string, amount: number, repeat: BoxRepeat | null) => {
@@ -481,7 +496,8 @@ export default function App({ initial, notice }: {
   };
 
   const addMenuItems: AddMenuItem[] = [
-    ...(book === 'business' ? [{ label: 'Record sale', icon: 'tag' as const, tone: 'in' as const, onClick: () => openAdd('income') }] : []),
+    ...(book === 'business' ? [{ label: 'Record sale', icon: 'tag' as const, tone: 'in' as const, onClick: () => setQuickSale('enter') }] : []),
+    ...(settings.currency ? [{ label: 'Paste bank alert', icon: 'import' as const, tone: 'in' as const, onClick: () => setQuickSale('paste') }] : []),
     { label: 'Add expense', icon: 'arrow-out', tone: 'out', onClick: () => openAdd('expense') },
     ...(book === 'business' ? [] : [{ label: 'Add income', icon: 'arrow-in' as const, tone: 'in' as const, onClick: () => openAdd('income') }]),
     ...(store.settings.business ? [{ label: book === 'business' ? 'Pay yourself' : 'Move money between sides', icon: 'transactions' as const, tone: 'save' as const, onClick: () => setPaying(true) }] : []),
@@ -556,7 +572,7 @@ export default function App({ initial, notice }: {
           detail: 'Money your business takes in: cash, transfer or POS. Record a day’s sales as one entry if that’s easier.',
           done: transactions.some((x) => x.type === 'income'),
           optional: true,
-          action: { label: 'Record sale', onClick: () => setAdding('income'), disabled: !hasCurrency },
+          action: { label: 'Record sale', onClick: () => setQuickSale('enter'), disabled: !hasCurrency },
         }
       : {
           id: 'income',
@@ -1013,7 +1029,7 @@ export default function App({ initial, notice }: {
               today={today}
               plan={currentPlan}
               top={<>{setupGuide}{sampleBanner}{alertBanner}</>}
-              onAdd={(type, category) => openAdd(type, false, category)}
+              onAdd={(type, category) => (type === 'income' && book === 'business' && !category ? setQuickSale('enter') : openAdd(type, false, category))}
               onNewBox={() => setBoxForm({})}
               onEditBox={(category, limit) => setBoxForm({ editing: { category, limit } })}
               onPay={store.settings.business ? () => setPaying(true) : undefined}
@@ -1231,6 +1247,23 @@ export default function App({ initial, notice }: {
               onSave={saveBox}
               onRemove={boxForm.editing ? () => removeBox(boxForm.editing!.category) : undefined}
               onCancel={() => setBoxForm(null)}
+            />
+          )}
+        </Modal>
+        <Modal open={quickSale != null} onClose={() => setQuickSale(null)} title={book === 'business' ? 'Record a sale' : 'Add money in'}>
+          {quickSale && (
+            <QuickSale
+              book={book}
+              tab={quickSale}
+              incomeCategories={settings.incomeCategories}
+              expenseCategories={settings.expenseCategories}
+              existing={transactions}
+              onSave={saveQuick}
+              onFullForm={() => {
+                setQuickSale(null);
+                openAdd('income');
+              }}
+              onCancel={() => setQuickSale(null)}
             />
           )}
         </Modal>

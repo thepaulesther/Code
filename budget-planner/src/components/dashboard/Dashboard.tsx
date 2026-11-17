@@ -82,6 +82,13 @@ export function Dashboard({ store, book, view, today, plan, top, onAdd, onNewBox
   const monthTx = useMemo(() => effectiveInMonth(view.transactions, month), [view.transactions, month]);
   const t = totals(monthTx);
   const balance = bookBalance(store, book, month);
+  // Business: today's sales by how they were paid.
+  const byMethod = useMemo(() => {
+    const out = { cash: 0, transfer: 0, pos: 0 };
+    for (const x of view.transactions) if (x.type === 'income' && x.date === today && x.method) out[x.method] += x.amount;
+    return out;
+  }, [view.transactions, today]);
+  const soldToday = byMethod.cash + byMethod.transfer + byMethod.pos;
   const latest = useMemo(
     () => [...view.transactions].filter((x) => x.date <= today).sort((a, b) => b.date.localeCompare(a.date))[0] as Transaction | undefined,
     [view.transactions, today],
@@ -133,6 +140,12 @@ export function Dashboard({ store, book, view, today, plan, top, onAdd, onNewBox
             <span><Icon name="arrow-in" size={14} /> In <strong className="num">{show(t.income)}</strong></span>
             <span><Icon name="arrow-out" size={14} /> Out <strong className="num">{show(t.expense)}</strong></span>
           </p>
+          {book === 'business' && soldToday > 0 && (
+            <p className="dash-today" data-testid="sales-today">
+              Today: Cash <strong className="num">{short(byMethod.cash)}</strong> · Transfer <strong className="num">{short(byMethod.transfer)}</strong> · POS{' '}
+              <strong className="num">{short(byMethod.pos)}</strong>
+            </p>
+          )}
         </div>
         <a className="dash-latest" href={seeTransactions}>
           <Icon name="check" size={18} />
