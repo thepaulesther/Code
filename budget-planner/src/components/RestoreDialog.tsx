@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { countsOf, parseBackup, type BackupInfo } from '../lib/backup';
-import type { AppData } from '../lib/store';
+import type { Store } from '../lib/books';
 import { Modal } from './Modal';
 import { Icon } from './ui/Icon';
 
@@ -8,7 +8,7 @@ type Step =
   | { kind: 'choose' }
   | { kind: 'checking' }
   | { kind: 'problems'; problems: string[] }
-  | { kind: 'preview'; data: AppData; info: BackupInfo };
+  | { kind: 'preview'; data: Store; info: BackupInfo };
 
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded';
@@ -24,8 +24,8 @@ export function RestoreDialog({ open, onClose, initialText, current, onRestore }
   onClose: () => void;
   /** Text to check straight away (e.g. a safety copy chosen in Settings). */
   initialText?: string;
-  current: AppData;
-  onRestore: (data: AppData) => void;
+  current: Store;
+  onRestore: (data: Store) => void;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Restore from backup" wide>
@@ -36,8 +36,8 @@ export function RestoreDialog({ open, onClose, initialText, current, onRestore }
 
 function RestoreBody({ initialText, current, onRestore, onCancel }: {
   initialText?: string;
-  current: AppData;
-  onRestore: (data: AppData) => void;
+  current: Store;
+  onRestore: (data: Store) => void;
   onCancel: () => void;
 }) {
   const [step, setStep] = useState<Step>(initialText ? { kind: 'checking' } : { kind: 'choose' });

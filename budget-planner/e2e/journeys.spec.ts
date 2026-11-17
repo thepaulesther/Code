@@ -250,3 +250,37 @@ test('the brand: dawn-over-tide mark and the "elora" wordmark, with a readable n
   await expect(brand.locator('.brand-mark')).toBeVisible();
   await expect(brand.getByRole('img', { name: 'Elora' })).toBeVisible();
 });
+
+test('business mode keeps business money apart from personal money', async ({ page, seed, pageErrors }) => {
+  await seed(sampleData());
+  await page.goto('/#/settings');
+  await expect(page.locator('.book-switch')).toHaveCount(0);
+  await page.check('#set-business');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  await expect(page.locator('.book-tag')).toHaveText('Business');
+
+  await page.goto('/#/transactions');
+  await expect(page.locator('.rows li')).toHaveCount(0);
+  await openAdd(page, 'expense');
+  await page.fill('#tx-amount', '45000');
+  await page.selectOption('#tx-category', 'Stock');
+  await page.fill('#tx-note', 'Rice for the shop');
+  await page.click('dialog[open] .form-submit button');
+
+  const business = await stored(page, 'business');
+  expect(business.transactions.map((t: { note: string }) => t.note)).toEqual(['Rice for the shop']);
+  const personal = await stored(page);
+  expect(personal.transactions.length).toBe(sampleData().transactions.length);
+  expect(personal.transactions.some((t: { note: string }) => t.note === 'Rice for the shop')).toBe(false);
+
+  await page.click('.book-switch [role="radio"]:has-text("Personal")');
+  await expect(page.getByText('Dinner with Sam').first()).toBeVisible();
+  await expect(page.getByText('Rice for the shop')).toHaveCount(0);
+
+  // Turning it off hides the switch; the business money is kept.
+  await page.goto('/#/settings');
+  await page.uncheck('#set-business');
+  await expect(page.locator('.book-switch')).toHaveCount(0);
+  expect((await stored(page, 'business')).transactions).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});

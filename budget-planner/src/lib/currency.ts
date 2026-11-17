@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { CURRENCIES, currencyName, round2 } from './budget';
+import { appLocale, CURRENCIES, currencyName, round2 } from './budget';
 
 export { round2 };
 
@@ -46,9 +46,9 @@ export function allCurrencies(): string[] {
 
 /** Display a rate with sensible precision: 1,520.35 / 1.0842 / 0.000657. */
 export function formatRate(rate: number): string {
-  if (rate >= 100) return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  if (rate >= 1) return rate.toLocaleString(undefined, { maximumFractionDigits: 4 });
-  return rate.toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  if (rate >= 100) return rate.toLocaleString(appLocale(), { maximumFractionDigits: 2 });
+  if (rate >= 1) return rate.toLocaleString(appLocale(), { maximumFractionDigits: 4 });
+  return rate.toLocaleString(appLocale(), { maximumSignificantDigits: 4 });
 }
 
 /** Plain number for an editable input (no grouping), e.g. "1520.35". */

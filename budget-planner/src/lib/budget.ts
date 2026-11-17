@@ -19,6 +19,8 @@ export interface Transaction {
   spread?: number;
   /** Part of the example data shown on first visit; "Remove examples" deletes these. */
   sample?: boolean;
+  /** Set on both parts of a payment split between the Personal and Business books. */
+  splitId?: string;
 }
 
 /** One-off example transactions: category, note and day of month (for recognising older saved examples). */
@@ -88,7 +90,7 @@ export function shiftMonth(month: string, n: number): string {
 
 export function monthLabel(month: string, style: 'long' | 'short' = 'long'): string {
   const [y, m] = month.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, {
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(LOCALE, {
     month: style,
     year: style === 'long' ? 'numeric' : undefined,
     timeZone: 'UTC',
@@ -96,7 +98,7 @@ export function monthLabel(month: string, style: 'long' | 'short' = 'long'): str
 }
 
 export const shortDate = (date: string) =>
-  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  new Date(date + 'T00:00:00').toLocaleDateString(LOCALE, { month: 'short', day: 'numeric' });
 
 export const inMonth = (txs: Transaction[], month: string) =>
   txs.filter((t) => monthOf(t.date) === month);
@@ -215,8 +217,10 @@ const csvCell = (v: string | number) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-export function toCSV(txs: Transaction[]): string {
+/** `side` (Personal or Business) adds a column saying which book the rows came from. */
+export function toCSV(txs: Transaction[], side?: string): string {
   const header = ['date', 'type', 'category', 'amount', 'note', 'original_amount', 'original_currency', 'rate', 'spread_months'];
+  if (side) header.push('side');
   const rows = [...txs]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((t) =>
@@ -230,6 +234,7 @@ export function toCSV(txs: Transaction[]): string {
         t.original?.currency ?? '',
         t.original ? String(t.original.rate) : '',
         isSpread(t) ? String(t.spread) : '',
+        ...(side ? [side] : []),
       ]
         .map(csvCell)
         .join(','),
@@ -239,10 +244,25 @@ export function toCSV(txs: Transaction[]): string {
 
 const fmtCache = new Map<string, Intl.NumberFormat>();
 
+/** The number and date format in use (e.g. "en-NG"); undefined means the device's own. */
+let LOCALE: string | undefined;
+export const appLocale = () => LOCALE;
+export function setAppLocale(locale: string | undefined) {
+  const next = locale || undefined;
+  if (next === LOCALE) return;
+  try {
+    if (next) new Intl.NumberFormat(next); // an unknown tag falls back to the device's format
+    LOCALE = next;
+  } catch {
+    LOCALE = undefined;
+  }
+  fmtCache.clear();
+}
+
 /** A plain number with no currency, used before the user has chosen one: 1,234.50 / 1.2K. */
 function plainFormat(compact?: boolean): Intl.NumberFormat {
   return new Intl.NumberFormat(
-    undefined,
+    LOCALE,
     compact
       ? { notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 },
@@ -267,7 +287,7 @@ export function formatMoney(
       f = !currency
         ? plainFormat(opts.compact)
         : new Intl.NumberFormat(
-            undefined,
+            LOCALE,
             opts.compact
               ? { style: 'currency', currency, ...display, notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 }
               : { style: 'currency', currency, ...display },
@@ -284,7 +304,7 @@ export function currencySymbol(currency: string): string {
   if (!currency) return '';
   try {
     return (
-      new Intl.NumberFormat(undefined, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' })
+      new Intl.NumberFormat(LOCALE, { style: 'currency', currency, currencyDisplay: 'narrowSymbol' })
         .formatToParts(0)
         .find((p) => p.type === 'currency')?.value ?? currency
     );
@@ -296,7 +316,7 @@ export function currencySymbol(currency: string): string {
 export function currencyName(currency: string): string {
   if (!currency) return 'No currency';
   try {
-    return new Intl.DisplayNames(undefined, { type: 'currency' }).of(currency) ?? currency;
+    return new Intl.DisplayNames(LOCALE, { type: 'currency' }).of(currency) ?? currency;
   } catch {
     return currency;
   }

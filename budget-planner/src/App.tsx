@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { BudgetPanel } from './components/BudgetPanel';
 import { SpendingDonut, TrendChart } from './components/Charts';
 import { ExportDialog } from './components/ExportDialog';
@@ -9,6 +9,7 @@ import { Modal } from './components/Modal';
 import { TransactionForm, type RepeatEvery, type SubmitOptions } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
+  setAppLocale,
   budgetStatus,
   effectiveInMonth,
   formatMoney,
@@ -36,7 +37,6 @@ import { conversionRate, useRates } from './lib/currency';
 import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
 import {
   applyRecurring,
-  changeBaseCurrency,
   editTransaction,
   hasSamples,
   addToGoal,
@@ -46,9 +46,13 @@ import {
   removeSamples,
   saveGoal,
   stopRule,
-  useAppData,
+  changeStoreCurrency,
+  encodeForSave,
+  applyRecurringAll,
+  useStore,
   useToday,
 } from './lib/store';
+import { activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
 import { PlanCard, PlanGlossary } from './components/PlanCard';
@@ -125,19 +129,34 @@ type DialogName = 'import' | 'export' | null;
 
 export default function App({ initial, notice }: {
   /** The saved data, already opened and checked (see Root). */
-  initial: AppData;
+  initial: Store;
   /** A message to show once on start, e.g. after an upgrade. */
   notice?: string;
 }) {
-  const [data, setData, saveStatus] = useAppData(initial);
+  const [store, setStore, saveStatus] = useStore(initial);
+  // Screens show one book at a time (Personal, or Business when business mode is on).
+  const book = activeBook(store);
+  const data = useMemo(() => viewOf(store, book), [store, book]);
+  const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
+    (update) =>
+      setStore((s) => {
+        const b = activeBook(s);
+        const view = viewOf(s, b);
+        const next = typeof update === 'function' ? update(view) : update;
+        return next === view ? s : mergeView(s, b, next);
+      }),
+    [setStore],
+  );
   // Today, kept current while the app stays open (it may be left open across a due date or a month end).
   const today = useToday();
   const CURRENT_MONTH = monthOf(today);
   // When the date changes, add repeating payments that have come due.
   useEffect(() => {
-    setData((d) => applyRecurring(d, today));
-  }, [today, setData]);
+    setStore((s) => applyRecurringAll(s, today));
+  }, [today, setStore]);
   const { transactions, budgets, recurring, settings } = data;
+  // Numbers and dates follow the chosen format (set before anything below is formatted).
+  setAppLocale(settings.locale);
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
   const route = useRoute();
@@ -183,7 +202,7 @@ export default function App({ initial, notice }: {
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
-  const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
+  const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions, store.settings.business ? bookName(book) : undefined) : ''), [dialog, transactions, store.settings.business, book]);
 
   // ---- Monthly plan, goals and alerts ----
   const goals = useMemo(() => data.goals ?? [], [data.goals]);
@@ -403,25 +422,35 @@ export default function App({ initial, notice }: {
   const [restoring, setRestoring] = useState<string | null>(null); // null: closed; '' : choose a file; text: check it
   const [backupText, setBackupText] = useState<string | null>(null);
   const backup = () => {
-    void createBackup(data).then((text) => {
+    void createBackup(store).then((text) => {
       if (IS_ARTIFACT || !downloadText(`elora-backup-${fileDate()}.json`, text)) setBackupText(text);
       else setToast('Downloaded a full backup. Keep it somewhere safe, such as your email or cloud storage.');
     });
   };
-  const restore = (next: AppData) => {
-    const before = data;
+  const restore = (next: Store) => {
+    const before = store;
     // Never replace data without a safety copy.
-    if (!takeSnapshot('restore', JSON.stringify(before))) {
+    if (!takeSnapshot('restore', encodeForSave(before))) {
       setToast('Restore cancelled: Elora couldn’t keep a safety copy of your current data (browser storage may be full).');
       return;
     }
-    setData(next);
+    setStore(next);
     setRestoring(null);
     setMonth(CURRENT_MONTH);
-    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setData(before));
+    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setStore(before));
   };
 
-  const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
+  const chooseBase = (c: string) => setStore((s) => changeStoreCurrency(s, c, 'relabel'));
+  const changeCurrency = (c: string, mode: 'convert' | 'relabel', rate: number) =>
+    setStore((s) => changeStoreCurrency(s, c, mode, rate));
+  const switchBook = (b: Book) => {
+    setToast(null); // an "Undo" belongs to the book it was made in
+    setStore((s) => setActiveBook(s, b));
+  };
+  const setBusiness = (on: boolean) => {
+    setToast(null);
+    setStore((s) => setBusinessMode(s, on));
+  };
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
       {label}
@@ -888,6 +917,13 @@ export default function App({ initial, notice }: {
           <>
             <PageHeader title="Settings" subtitle="Appearance, currency, plan and alerts, categories and your data." />
             <SettingsPanel
+              onChangeCurrency={changeCurrency}
+              onBusiness={setBusiness}
+              onDeleteAll={() => {
+                if (!takeSnapshot('reset', encodeForSave(store))) return false;
+                setStore((s) => emptyStore({ ...viewOf(s, 'personal').settings, book: 'personal' }));
+                return true;
+              }}
               onReset={() => {
                 setup.reset();
                 layout.reset();
@@ -1006,6 +1042,18 @@ export default function App({ initial, notice }: {
         <Sidebar route={route} online={online} onInstall={install} />
         <MobileTopBar online={online} />
         <Main>
+          {store.settings.business && (
+            <div className={book === 'business' ? 'book-bar is-business' : 'book-bar'}>
+              <div className="segmented book-switch" role="radiogroup" aria-label="Show Personal or Business money">
+                {(['personal', 'business'] as const).map((b) => (
+                  <button key={b} type="button" role="radio" aria-checked={book === b} className={book === b ? 'is-on' : ''} onClick={() => switchBook(b)}>
+                    {bookName(b)}
+                  </button>
+                ))}
+              </div>
+              {book === 'business' && <span className="book-tag">Business</span>}
+            </div>
+          )}
           {saveStatus.newerElsewhere && (
             <div className="alert-banner level-over-plan" role="alert">
               <span className="alert-icon"><Icon name="alert" size={20} /></span>
@@ -1100,7 +1148,7 @@ export default function App({ initial, notice }: {
           open={restoring != null}
           onClose={() => setRestoring(null)}
           initialText={restoring || undefined}
-          current={data}
+          current={store}
           onRestore={restore}
         />
         <Modal open={backupText != null} onClose={() => setBackupText(null)} title="Your backup">

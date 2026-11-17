@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBackup, parseBackup, validateAppData } from './backup';
+import { storeFromView } from './books';
 import { defaultSettings, type AppData } from './store';
 
 const data = (): AppData => ({
@@ -15,10 +16,11 @@ const data = (): AppData => ({
   settings: { ...defaultSettings(), currency: 'NGN', theme: 'dark' },
   alertLog: { '2026-11': 'near-plan' },
 });
+const store = () => storeFromView(data());
 
 describe('backup round trip', () => {
   it('restores exactly what was backed up', async () => {
-    const original = data();
+    const original = store();
     const r = await parseBackup(await createBackup(original, new Date('2026-11-14T20:00:00Z')));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -36,11 +38,13 @@ describe('backup round trip', () => {
   });
 
   it('includes settings, goals, repeating items and alert history', async () => {
-    const file = JSON.parse(await createBackup(data()));
-    expect(file).toMatchObject({ format: 'elora-backup', formatVersion: 1, dataVersion: 2 });
+    const file = JSON.parse(await createBackup(store()));
+    expect(file).toMatchObject({ format: 'elora-backup', formatVersion: 1, dataVersion: 3 });
     expect(file.data.settings.theme).toBe('dark');
-    expect(file.data.goals[0].contributions).toHaveLength(1);
-    expect(file.data.alertLog).toEqual({ '2026-11': 'near-plan' });
+    expect(file.data.books.personal.goals[0].contributions).toHaveLength(1);
+    expect(file.data.books.personal.alertLog).toEqual({ '2026-11': 'near-plan' });
+    // Amounts are saved in kobo.
+    expect(file.data.books.personal.transactions[0].amount).toBe(50_000_000);
   });
 });
 
@@ -51,22 +55,22 @@ describe('parseBackup refuses unsafe files', () => {
   });
 
   it('rejects a file edited after it was made', async () => {
-    const file = JSON.parse(await createBackup(data()));
-    file.data.transactions[0].amount = 1;
+    const file = JSON.parse(await createBackup(store()));
+    file.data.books.personal.transactions[0].amount = 1;
     const r = await parseBackup(JSON.stringify(file));
     expect(r).toMatchObject({ ok: false, problems: [expect.stringContaining('checksum')] });
   });
 
   it('rejects a file whose counts don’t match its records', async () => {
-    const file = JSON.parse(await createBackup(data()));
+    const file = JSON.parse(await createBackup(store()));
     file.counts.transactions = 9;
     expect(await parseBackup(JSON.stringify(file))).toMatchObject({ ok: false, problems: [expect.stringContaining('number of records')] });
   });
 
   it('rejects backups and data from a newer version', async () => {
-    const file = JSON.parse(await createBackup(data()));
+    const file = JSON.parse(await createBackup(store()));
     expect(await parseBackup(JSON.stringify({ ...file, formatVersion: 2 }))).toMatchObject({ ok: false });
-    expect(await parseBackup(JSON.stringify({ ...data(), version: 3 }))).toMatchObject({ ok: false });
+    expect(await parseBackup(JSON.stringify({ ...data(), version: 4 }))).toMatchObject({ ok: false });
   });
 });
 
