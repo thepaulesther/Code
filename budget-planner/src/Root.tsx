@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import App from './App';
 import { RecoveryScreen } from './components/RecoveryScreen';
-import { defaultSettings, emptyData, openStore, quarantine, type StoreState } from './lib/store';
+import { newStore, openStore, quarantine, type StoreState } from './lib/store';
 
 /**
  * Opens the saved data once, before the app starts. Data that can't be used safely shows the
@@ -19,7 +19,7 @@ export default function Root() {
         onStartFresh={() => {
           // Never replace it without keeping a copy first.
           if (!quarantine(state.raw)) return false;
-          setState({ status: 'empty', data: emptyData(defaultSettings()) });
+          setState({ status: 'empty', data: newStore() });
           return true;
         }}
       />

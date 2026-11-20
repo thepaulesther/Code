@@ -54,12 +54,14 @@ describe('migrate', () => {
     const v1 = { version: 1, transactions: v2.transactions, budgets: { Groceries: 300 } };
     const before = JSON.stringify(v1);
     const r = migrate(v1);
-    expect(r).toMatchObject({ ok: true, from: 1, steps: 1, data: { version: CURRENT_VERSION, budgets: { Groceries: 300 }, recurring: [] } });
+    expect(r).toMatchObject({ ok: true, from: 1, steps: 2, data: { version: CURRENT_VERSION, books: { personal: { budgets: { Groceries: 30_000 }, recurring: [] } } } });
     expect(JSON.stringify(v1)).toBe(before);
   });
 
   it('leaves current data as it is', () => {
-    expect(migrate(v2)).toMatchObject({ ok: true, steps: 0, data: v2 });
+    const v3 = migrate(v2);
+    if (!v3.ok) throw new Error(v3.reason);
+    expect(migrate(v3.data)).toMatchObject({ ok: true, steps: 0, data: v3.data });
   });
 
   it('refuses data from a newer version, or with no version', () => {
@@ -83,11 +85,14 @@ describe('openStore', () => {
   });
 
   it('opens current data, filling in missing settings', () => {
-    const { settings, ...rest } = v2;
-    fake.map.set('bp.data', JSON.stringify({ ...rest, settings: { currency: settings.currency } }));
+    const m = migrate(v2);
+    if (!m.ok) throw new Error(m.reason);
+    const saved = structuredClone(m.data) as { books: { personal: Record<string, unknown> } };
+    delete saved.books.personal.expenseCategories;
+    fake.map.set('bp.data', JSON.stringify(saved));
     const s = openStore();
     expect(s.status).toBe('ok');
-    if (s.status === 'ok') expect(s.data.settings.expenseCategories.length).toBeGreaterThan(0);
+    if (s.status === 'ok') expect(s.data.books.personal.expenseCategories.length).toBeGreaterThan(0);
   });
 
   it('never overwrites data saved by a newer version', () => {
@@ -114,7 +119,7 @@ describe('openStore', () => {
     if (s.status !== 'migrated') return;
     expect(s.from).toBe(1);
     expect(s.data.settings.currency).toBe('USD');
-    expect(s.data.transactions).toHaveLength(1);
+    expect(s.data.books.personal.transactions).toHaveLength(1);
     expect(JSON.parse(fake.map.get(s.snapshotKey)!)).toMatchObject({ version: 1, budgets: { Groceries: 300 } });
     // The old keys are left alone.
     expect(fake.map.has('bp.transactions')).toBe(true);

@@ -1,3 +1,5 @@
+import { upgradeV2toV3 } from './books';
+
 /**
  * Versioned upgrades of the stored data. Each step turns version n into n + 1 and is a pure function,
  * so it can be tested on its own and run on a copy: nothing is saved unless every step succeeds and
@@ -6,7 +8,7 @@
  * Adding a format: bump CURRENT_VERSION, append a step, add tests with real old-format fixtures.
  */
 
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 export interface Migration {
   from: number;
@@ -30,6 +32,12 @@ export const MIGRATIONS: Migration[] = [
       // Missing settings are filled with defaults by the loader.
       settings: { currency: 'USD' },
     }),
+  },
+  {
+    from: 2,
+    to: 3,
+    describe: 'Version 2 kept one set of money in decimal amounts. Version 3 keeps Personal and Business apart and saves amounts as whole kobo (minor units).',
+    run: (d) => upgradeV2toV3(d),
   },
 ];
 

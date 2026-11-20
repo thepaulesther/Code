@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, sampleData, stored, test } from './fixtures';
+import { upgradeV2toV3 } from '../src/lib/books';
+import { expect, sampleData, stored, storedRaw, test } from './fixtures';
 
 /** Saved data is never overwritten without confirmation, and backups restore exactly. */
 
@@ -37,11 +38,28 @@ test.describe('data Elora can’t use safely is never overwritten', () => {
   });
 
   test('opening the app writes nothing when nothing changed', async ({ page, seed }) => {
-    const text = JSON.stringify(sampleData());
+    const text = JSON.stringify(upgradeV2toV3(sampleData()));
     await seed(text);
     await page.goto('/');
-    await expect(page.locator('.hero')).toBeVisible();
+    await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
     expect(await raw(page)).toBe(text);
+  });
+
+  test('version 2 data is upgraded once, after a safety copy, with every amount kept', async ({ page, seed }) => {
+    const v2 = sampleData();
+    const text = JSON.stringify(v2);
+    await seed(text);
+    await page.goto('/');
+    await expect(page.locator('.toast')).toContainText('upgraded');
+    const saved = await storedRaw(page);
+    expect(saved.version).toBe(3);
+    // Amounts are saved in pence/kobo, and read back exactly.
+    expect(saved.books.personal.transactions[0].amount).toBe((v2.transactions[0].amount as number) * 100);
+    const view = await stored(page);
+    for (const key of ['budgets', 'recurring', 'goals'] as const) expect(view[key]).toEqual(v2[key]);
+    expect(view.transactions.slice(0, v2.transactions.length)).toEqual(v2.transactions);
+    const copies = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('bp.snapshot.v2.')).map((k) => localStorage.getItem(k)));
+    expect(copies).toEqual([text]);
   });
 });
 
@@ -95,7 +113,7 @@ test('a full backup restores exactly, after refusing damaged and foreign files',
 
   await page.click('button:has-text("Restore from backup")');
   const tampered = structuredClone(backup);
-  tampered.data.transactions[0].amount = 1;
+  tampered.data.books.personal.transactions[0].amount = 1;
   for (const [text, reason] of [
     [JSON.stringify(tampered), 'checksum'],
     [JSON.stringify({ ...backup, formatVersion: 9 }), 'newer version'],

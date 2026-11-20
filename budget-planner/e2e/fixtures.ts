@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from '@playwright/test';
+import { decodeStore, viewOf, type Book } from '../src/lib/books';
 
 /**
  * Shared test set-up.
@@ -95,14 +96,28 @@ export { expect };
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1000) < 600;
 
-/** The saved data, parsed. */
-export const stored = async (page: Page) => JSON.parse((await page.evaluate(() => localStorage.getItem('bp.data'))) ?? 'null');
+/** The saved data exactly as stored (format v3: two books, amounts in minor units). */
+export const storedRaw = async (page: Page) => JSON.parse((await page.evaluate(() => localStorage.getItem('bp.data'))) ?? 'null');
+
+/**
+ * The saved data as the app's screens see one book (Personal by default): amounts in major units,
+ * the same shape as before format v3, so tests read like the app.
+ */
+export const stored = async (page: Page, book: Book = 'personal') => {
+  const raw = await storedRaw(page);
+  const s = decodeStore(raw);
+  return s ? viewOf(s, book) : raw;
+};
 
 /** Open the add-transaction sheet from wherever the page offers it. */
 export async function openAdd(page: Page, kind: 'expense' | 'income' = 'expense') {
   const quick = page.locator(`button.qa:has-text("Add ${kind}")`);
   if (await quick.isVisible()) return quick.click();
-  if (isPhone(page)) await page.click('.fab');
+  if (isPhone(page)) {
+    await page.click('.fab');
+    // The + opens a short menu of add options.
+    await page.click('.add-menu-list button:has-text("Add expense")');
+  }
   else await page.click('.page-actions .btn-primary:has-text("Add transaction")');
   if (kind === 'income') await page.click('dialog[open] [role="radio"]:has-text("Income")');
 }

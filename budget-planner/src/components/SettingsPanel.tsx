@@ -8,13 +8,10 @@ import {
   alertSettingsOf,
   planSettingsOf,
   categoryNameError,
-  changeBaseCurrency,
   deleteCategory,
   deleteSnapshot,
-  emptyData,
   listSnapshots,
   readSnapshot,
-  takeSnapshot,
   renameCategory,
   type AppData,
   type Theme,
@@ -114,7 +111,8 @@ function PlanAndAlerts({ data, setData }: { data: AppData; setData: SetData }) {
   );
 }
 
-function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
+function BaseCurrency({ onChangeCurrency, data, rates, ratesStatus, onRefreshRates }: {
+  onChangeCurrency: (currency: string, mode: 'convert' | 'relabel', rate: number) => void;
   data: AppData;
   setData: SetData;
   rates?: RateCache;
@@ -141,7 +139,7 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
     if (c === base) return setPending(null);
     // Nothing to convert (no data yet, or no currency before): just set it.
     if (!hasData || !base) {
-      setData((d) => changeBaseCurrency(d, c, 'relabel'));
+      onChangeCurrency(c, 'relabel', 1);
       return setPending(null);
     }
     setPending(c);
@@ -150,7 +148,7 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
   const apply = () => {
     if (!pending || (mode === 'convert' && !rate)) return;
     const target = pending;
-    setData((d) => changeBaseCurrency(d, target, mode, rate ?? 1));
+    onChangeCurrency(target, mode, rate ?? 1);
     setPending(null);
   };
 
@@ -233,7 +231,13 @@ function BaseCurrency({ data, setData, rates, ratesStatus, onRefreshRates }: {
 }
 
 /** The Settings page. */
-export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, onCustomiseOverview, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+export function SettingsPanel({ onChangeCurrency, onDeleteAll, onBusiness, onReset, onExport, onBackup, onRestore, onDownloadSnapshot, canExport, setupHidden, onShowSetup, onCustomiseOverview, data, setData, showInstallHelp, ratesStatus, onRefreshRates }: {
+  /** Change the base currency for both books. */
+  onChangeCurrency: (currency: string, mode: 'convert' | 'relabel', rate: number) => void;
+  /** Delete every book's data (a safety copy is kept first). False when that copy couldn't be saved. */
+  onDeleteAll: () => boolean;
+  /** Turn business mode on or off. */
+  onBusiness: (on: boolean) => void;
   /** Called after "Delete all data". */
   onReset: () => void;
   /** Download (or show) a full backup. */
@@ -286,7 +290,42 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
         </div>
       </section>
 
-      <BaseCurrency data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
+      <section className="set-section">
+        <h3>Business</h3>
+        <label className="check">
+          <input
+            id="set-business"
+            type="checkbox"
+            checked={!!settings.business}
+            onChange={(e) => onBusiness(e.target.checked)}
+          />
+          <span>
+            I also run a business
+            <small>
+              Keeps a separate Business side for sales, stock, staff and other business money. Switch between
+              Personal and Business at the top of each page. Your personal figures never include business money.
+            </small>
+          </span>
+        </label>
+      </section>
+
+      <section className="set-section">
+        <h3>Number and date format</h3>
+        <label className="field">
+          <span>Format</span>
+          <select value={settings.locale ?? ''} onChange={(e) => setSettings({ locale: e.target.value || undefined })}>
+            <option value="en-NG">Nigeria (16 Nov 2026, ₦1,234.50)</option>
+            <option value="en-GH">Ghana</option>
+            <option value="en-KE">Kenya</option>
+            <option value="en-ZA">South Africa</option>
+            <option value="en-GB">United Kingdom</option>
+            <option value="en-US">United States (Nov 16, 2026)</option>
+            <option value="">This device’s format</option>
+          </select>
+        </label>
+      </section>
+
+      <BaseCurrency onChangeCurrency={onChangeCurrency} data={data} setData={setData} rates={rates} ratesStatus={ratesStatus} onRefreshRates={onRefreshRates} />
 
       <PlanAndAlerts data={data} setData={setData} />
 
@@ -381,8 +420,7 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
                 className="btn-danger"
                 onClick={() => {
                   // Keep a safety copy, so even this can be undone from the list above.
-                  takeSnapshot('reset', JSON.stringify(data));
-                  setData((d) => emptyData(d.settings));
+                  if (!onDeleteAll()) return;
                   setConfirmReset(false);
                   onReset();
                 }}
@@ -397,6 +435,11 @@ export function SettingsPanel({ onReset, onExport, onBackup, onRestore, onDownlo
           </button>
         )}
       </section>
+
+      <p className="hint build-stamp">
+        Version {__BUILD_COMMIT__} · built{' '}
+        {new Date(__BUILD_DATE__).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+      </p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatMoney, monthLabel, shortDate, todayISO } from '../lib/budget';
+import { appLocale, formatMoney, monthLabel, shortDate, todayISO } from '../lib/budget';
 import { useFormat } from '../lib/format';
 import { EmptyState } from './ui/EmptyState';
 import {
@@ -12,7 +12,7 @@ import {
 } from '../lib/recurring';
 
 const fullDate = (date: string) =>
-  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  new Date(date + 'T00:00:00').toLocaleDateString(appLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
 
 export function RecurringPanel({ rules, rateFor, paymentCount, onToggle, onDelete }: {
   rules: RecurringRule[];

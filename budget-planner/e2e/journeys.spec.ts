@@ -5,7 +5,7 @@ import { expect, isPhone, openAdd, sampleData, stored, test } from './fixtures';
 test('a new user sets up, adds income and spending, and can undo', async ({ page, pageErrors }) => {
   await page.goto('/');
   await expect(page.locator('#setup-title')).toBeVisible();
-  await expect(page.getByText('What you’ll see here')).toBeVisible();
+  await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
 
   await page.selectOption('#welcome-currency', 'NGN');
   expect((await stored(page)).settings.currency).toBe('NGN');
@@ -23,7 +23,7 @@ test('a new user sets up, adds income and spending, and can undo', async ({ page
   await page.selectOption('#tx-category', 'Dining');
   await page.click('dialog[open] .form-submit button');
   expect((await stored(page)).transactions).toHaveLength(2);
-  await expect(page.locator('.hero-value')).toContainText('487,500');
+  await expect(page.locator('[data-testid="dash-balance"]')).toContainText('487,500');
 
   await page.click('.toast .toast-action');
   expect((await stored(page)).transactions).toHaveLength(1);
@@ -86,7 +86,7 @@ test('budgets are set and an over-budget category says so in words', async ({ pa
 
 test('an emergency fund goal is created from the Overview and money added', async ({ page, seed }) => {
   await seed({ ...sampleData(), goals: [] });
-  await page.goto('/');
+  await page.goto('/#/overview');
   await page.click('button.qa:has-text("New goal")');
   await page.click('dialog[open] .chip:has-text("Emergency fund")');
   await page.fill('#goal-target', '5000');
@@ -163,7 +163,7 @@ test('navigation: back button, unknown pages, active state and the keyboard', as
   await page.goBack();
   await expect(page.locator('#page-title')).toHaveText('Budgets');
   await page.goto('/#/no-such-page');
-  await expect(page.locator('.hero')).toBeVisible();
+  await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
   if (isPhone(page)) {
     await expect(page.locator('.tab.is-active')).toHaveAttribute('href', '#/');
   } else {
@@ -179,7 +179,7 @@ test('navigation: back button, unknown pages, active state and the keyboard', as
 test('month comparisons stop at the same day while the month is running', async ({ page, seed }) => {
   test.skip(new Date().getDate() >= 28, 'Late in the month the comparison may cover whole months.');
   await seed(sampleData());
-  await page.goto('/');
+  await page.goto('/#/overview');
   await expect(page.locator('.hero-flow-delta').first()).toContainText('same day last month');
 });
 
@@ -187,7 +187,7 @@ test('repeating bills: upcoming ones are shown, added on their day, and the bala
   // The case reported in review: bills due later in the month seemed not to repeat, and the balance
   // didn't match the plan's Left to spend.
   await page.clock.install({ time: new Date('2026-11-14T10:00:00') });
-  await page.goto('/');
+  await page.goto('/#/overview');
   await page.selectOption('#welcome-currency', 'NGN');
   const add = async (type: 'income' | 'expense', amount: number, category: string, note: string, date: string) => {
     await openAdd(page, type);
@@ -208,7 +208,7 @@ test('repeating bills: upcoming ones are shown, added on their day, and the bala
   await page.click('dialog[open] .form-submit button');
 
   // Upcoming bills are visible, and the hero shows what's still to pay.
-  await page.goto('/');
+  await page.goto('/#/overview');
   const coming = page.locator('.coming-up');
   await expect(coming).toContainText('Electricity');
   await expect(coming).toContainText('Phone plan');
@@ -249,4 +249,38 @@ test('the brand: dawn-over-tide mark and the "elora" wordmark, with a readable n
   const brand = isPhone(page) ? page.locator('.topbar-mobile .brand') : page.locator('.sidebar .brand');
   await expect(brand.locator('.brand-mark')).toBeVisible();
   await expect(brand.getByRole('img', { name: 'Elora' })).toBeVisible();
+});
+
+test('business mode keeps business money apart from personal money', async ({ page, seed, pageErrors }) => {
+  await seed(sampleData());
+  await page.goto('/#/settings');
+  await expect(page.locator('.book-switch')).toHaveCount(0);
+  await page.check('#set-business');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  await expect(page.locator('.book-tag')).toHaveText('Business');
+
+  await page.goto('/#/transactions');
+  await expect(page.locator('.rows li')).toHaveCount(0);
+  await openAdd(page, 'expense');
+  await page.fill('#tx-amount', '45000');
+  await page.selectOption('#tx-category', 'Stock');
+  await page.fill('#tx-note', 'Rice for the shop');
+  await page.click('dialog[open] .form-submit button');
+
+  const business = await stored(page, 'business');
+  expect(business.transactions.map((t: { note: string }) => t.note)).toEqual(['Rice for the shop']);
+  const personal = await stored(page);
+  expect(personal.transactions.length).toBe(sampleData().transactions.length);
+  expect(personal.transactions.some((t: { note: string }) => t.note === 'Rice for the shop')).toBe(false);
+
+  await page.click('.book-switch [role="radio"]:has-text("Personal")');
+  await expect(page.getByText('Dinner with Sam').first()).toBeVisible();
+  await expect(page.getByText('Rice for the shop')).toHaveCount(0);
+
+  // Turning it off hides the switch; the business money is kept.
+  await page.goto('/#/settings');
+  await page.uncheck('#set-business');
+  await expect(page.locator('.book-switch')).toHaveCount(0);
+  expect((await stored(page, 'business')).transactions).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
 });

@@ -1,5 +1,6 @@
+import { BOOKS, bookName, decodeStore, encodeStore, viewOf, type Store } from './books';
 import { CURRENT_VERSION, migrate, versionOf } from './migrations';
-import { completeData, type AppData } from './store';
+import { completeStore } from './store';
 
 /**
  * Full backups: every financial record and setting Elora keeps, in one JSON file.
@@ -26,15 +27,22 @@ export interface BackupFile {
   counts: BackupCounts;
   /** SHA-256 of `data` as written. Detects a damaged or edited file; it is not a security measure. */
   checksum: string | null;
-  data: AppData;
+  /** The saved data exactly as Elora stores it (format v3: amounts in minor units). */
+  data: unknown;
 }
 
-export const countsOf = (d: AppData): BackupCounts => ({
-  transactions: d.transactions.length,
-  repeating: d.recurring.length,
-  budgets: Object.keys(d.budgets).length,
-  goals: (d.goals ?? []).length,
-});
+/** Records in both books (and unsorted payments). */
+export const countsOf = (s: Store): BackupCounts => {
+  const c = { transactions: s.unsorted.length, repeating: 0, budgets: 0, goals: 0 };
+  for (const b of BOOKS) {
+    const book = s.books[b];
+    c.transactions += book.transactions.length;
+    c.repeating += book.recurring.length;
+    c.budgets += Object.keys(book.budgets).length;
+    c.goals += book.goals.length;
+  }
+  return c;
+};
 
 /** Hex SHA-256 of `text`, or null where the browser can't compute it (e.g. a non-HTTPS page). */
 export async function sha256(text: string): Promise<string | null> {
@@ -47,14 +55,15 @@ export async function sha256(text: string): Promise<string | null> {
   }
 }
 
-export async function createBackup(data: AppData, now = new Date()): Promise<string> {
+export async function createBackup(store: Store, now = new Date()): Promise<string> {
+  const data = encodeStore(store);
   const file: BackupFile = {
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
-    dataVersion: data.version,
+    dataVersion: store.version,
     app: 'Elora',
     exportedAt: now.toISOString(),
-    counts: countsOf(data),
+    counts: countsOf(store),
     checksum: await sha256(JSON.stringify(data)),
     data,
   };
@@ -165,7 +174,7 @@ export interface BackupInfo {
 }
 
 export type ParseResult =
-  | { ok: true; data: AppData; info: BackupInfo }
+  | { ok: true; data: Store; info: BackupInfo }
   | { ok: false; problems: string[] };
 
 /** Read and check a backup before anything is replaced. Never touches stored data. */
@@ -208,9 +217,14 @@ export async function parseBackup(text: string): Promise<ParseResult> {
   const m = migrate(payload);
   if (!m.ok) return { ok: false, problems: [m.reason] };
 
-  const problems = validateAppData(m.data);
+  const decoded = decodeStore(m.data);
+  if (!decoded) return { ok: false, problems: ['This file doesn’t contain Elora data.'] };
+  // Each book is checked record by record; Business problems say so.
+  const problems = BOOKS.flatMap((b) =>
+    validateAppData(viewOf(decoded, b)).map((p) => (b === 'business' ? `${bookName(b)}: ${p}` : p)),
+  );
   if (problems.length) return { ok: false, problems };
-  const data = completeData(m.data);
+  const data = completeStore(m.data);
   if (!data) return { ok: false, problems: ['Some of the data isn’t in the shape Elora expects.'] };
 
   if (kind === 'backup' && isObj(parsed.counts)) {
@@ -220,7 +234,7 @@ export async function parseBackup(text: string): Promise<ParseResult> {
       return { ok: false, problems: ['The number of records doesn’t match what the backup says it contains, so it may be incomplete.'] };
   }
 
-  const dates = data.transactions.map((t) => t.date).sort();
+  const dates = [...data.books.personal.transactions, ...data.books.business.transactions, ...data.unsorted].map((t) => t.date).sort();
   return {
     ok: true,
     data,

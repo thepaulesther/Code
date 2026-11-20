@@ -8,11 +8,11 @@ test('the app loads with the network off once it has been opened', async ({ page
     await navigator.serviceWorker.ready;
   });
   await page.reload();
-  await expect(page.locator('.hero')).toBeVisible();
+  await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
 
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('#page-title')).toBeVisible();
-  await expect(page.locator('.hero-value')).not.toBeEmpty();
+  await expect(page.locator('[data-testid="dash-balance"]')).not.toBeEmpty();
   await context.setOffline(false);
 });

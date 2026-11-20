@@ -4,16 +4,16 @@ import { useEffect, useState } from 'react';
  * Hash-based routing (#/budgets). Hash URLs work on GitHub Pages sub-paths and in the single-file
  * build without any server setup, and need no router dependency.
  */
-export const ROUTES = ['overview', 'transactions', 'budgets', 'savings', 'insights', 'plans', 'settings'] as const;
+export const ROUTES = ['dashboard', 'overview', 'transactions', 'budgets', 'savings', 'insights', 'plans', 'settings'] as const;
 export type Route = (typeof ROUTES)[number];
 
-/** '#/budgets' -> 'budgets'. Anything unknown (including no hash) is the Overview. */
+/** '#/budgets' -> 'budgets'. Anything unknown (including no hash) is the Dashboard, the home page. */
 export function parseRoute(hash: string): Route {
   const name = hash.replace(/^#\/?/, '').split(/[/?]/)[0].toLowerCase();
-  return (ROUTES as readonly string[]).includes(name) ? (name as Route) : 'overview';
+  return (ROUTES as readonly string[]).includes(name) ? (name as Route) : 'dashboard';
 }
 
-export const hrefFor = (route: Route) => (route === 'overview' ? '#/' : `#/${route}`);
+export const hrefFor = (route: Route) => (route === 'dashboard' ? '#/' : `#/${route}`);
 
 /** The current page, kept in step with the address bar (back/forward buttons work). */
 export function useRoute(): Route {

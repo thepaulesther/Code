@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { formatMoney, shortDate, type Entry } from '../lib/budget';
+import { appLocale, formatMoney, shortDate, type Entry } from '../lib/budget';
 import { formatRate } from '../lib/currency';
 import { useFormat } from '../lib/format';
 import { EmptyState } from './ui/EmptyState';
@@ -8,7 +8,7 @@ import { Icon } from './ui/Icon';
 type Filter = 'all' | 'income' | 'expense';
 
 const fullDate = (date: string) =>
-  new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  new Date(date + 'T00:00:00').toLocaleDateString(appLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
 
 export function TransactionList({ transactions, onDelete, onEdit, recent, title = 'Transactions', action, emptyAction }: {
   /** This month's entries, including shares of spread payments. */

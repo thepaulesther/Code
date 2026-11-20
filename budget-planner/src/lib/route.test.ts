@@ -8,10 +8,11 @@ describe('parseRoute', () => {
     expect(parseRoute('#budgets')).toBe('budgets');
   });
 
-  it('falls back to the overview for empty or unknown hashes', () => {
-    expect(parseRoute('')).toBe('overview');
-    expect(parseRoute('#/')).toBe('overview');
-    expect(parseRoute('#/nope')).toBe('overview');
+  it('falls back to the dashboard (the home page) for empty or unknown hashes', () => {
+    expect(parseRoute('')).toBe('dashboard');
+    expect(parseRoute('#/')).toBe('dashboard');
+    expect(parseRoute('#/nope')).toBe('dashboard');
+    expect(parseRoute('#/overview')).toBe('overview');
   });
 
   it('ignores extra path parts, queries and letter case', () => {

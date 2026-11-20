@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { CURRENCIES, currencyName, round2 } from './budget';
+import { appLocale, CURRENCIES, currencyName, round2 } from './budget';
 
 export { round2 };
 
@@ -22,9 +22,10 @@ export function conversionRate(cache: RateCache | undefined, from: string, to: s
 }
 
 /** Common currencies first in pickers, including ones popular with remote workers. */
+/** Shown first in currency menus: Nigeria first, then Africa's other main currencies, then the most traded. */
 export const COMMON_CURRENCIES = [
-  'USD', 'EUR', 'GBP', 'NGN', 'JPY', 'CAD', 'AUD', 'INR', 'CNY', 'GHS',
-  'KES', 'ZAR', 'EGP', 'AED', 'CHF', 'BRL', 'MXN', 'PHP', 'PKR', 'SGD',
+  'NGN', 'GHS', 'KES', 'ZAR', 'EGP', 'USD', 'EUR', 'GBP', 'JPY', 'CAD',
+  'AUD', 'INR', 'CNY', 'AED', 'CHF', 'BRL', 'MXN', 'PHP', 'PKR', 'SGD',
 ];
 
 let allCache: string[] | null = null;
@@ -46,9 +47,9 @@ export function allCurrencies(): string[] {
 
 /** Display a rate with sensible precision: 1,520.35 / 1.0842 / 0.000657. */
 export function formatRate(rate: number): string {
-  if (rate >= 100) return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  if (rate >= 1) return rate.toLocaleString(undefined, { maximumFractionDigits: 4 });
-  return rate.toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  if (rate >= 100) return rate.toLocaleString(appLocale(), { maximumFractionDigits: 2 });
+  if (rate >= 1) return rate.toLocaleString(appLocale(), { maximumFractionDigits: 4 });
+  return rate.toLocaleString(appLocale(), { maximumSignificantDigits: 4 });
 }
 
 /** Plain number for an editable input (no grouping), e.g. "1520.35". */

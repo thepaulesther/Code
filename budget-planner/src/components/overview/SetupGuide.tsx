@@ -14,12 +14,14 @@ export interface SetupStep {
 }
 
 /** A short, skippable checklist that walks a new user through Elora's existing features. */
-export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
+export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide, title = 'Set up Elora' }: {
   steps: SetupStep[];
   skipped: string[];
   onSkip: (id: string) => void;
   onUnskip: (id: string) => void;
   onHide: () => void;
+  /** The guide's heading, e.g. "Set up your business" on the Business side. */
+  title?: string;
 }) {
   const doneCount = steps.filter((s) => s.done).length;
   const current = steps.find((s) => !s.done && !skipped.includes(s.id));
@@ -47,7 +49,7 @@ export function SetupGuide({ steps, skipped, onSkip, onUnskip, onHide }: {
     <section className="card setup" aria-labelledby="setup-title">
       <div className="card-head">
         <h2 id="setup-title">
-          Set up Elora
+          {title}
           <span className="card-sub">{doneCount} of {steps.length} done · every step after the first is optional</span>
         </h2>
         <button type="button" className="btn-ghost sm" onClick={hide}>Hide guide</button>

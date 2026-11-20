@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
+  shiftMonth,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
   monthOf,
@@ -14,6 +15,7 @@ import { conversionRate, round2, type RateCache } from './currency';
 import { DEFAULT_PLAN, syncAutoSavings, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
 import { CURRENT_VERSION, migrate, versionOf } from './migrations';
+import { BOOKS, decodeStore, emptyStore, encodeStore, mergeView, viewOf, type Book, type Store } from './books';
 import { keysWithPrefix, readJSON, readRaw, removeKey, writeRaw } from './storage';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -36,8 +38,18 @@ export interface Settings {
   incomeCategories: string[];
   plan?: PlanSettings;
   alerts?: AlertSettings;
+  /** Number and date format, e.g. "en-NG". Empty or missing: the device's own format. */
+  locale?: string;
+  /** Business mode: keep a separate Business book alongside Personal. */
+  business?: boolean;
+  /** Which book the screens show when business mode is on. */
+  book?: Book;
 }
 
+/**
+ * One book's data, in the shape the screens use (see `viewOf` in books.ts). Saved data is a whole
+ * `Store` (format v3); this shape is also how version 2 data looked.
+ */
 export interface AppData {
   version: 2;
   transactions: Transaction[];
@@ -85,6 +97,11 @@ export const defaultSettings = (): Settings => ({
   expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
   incomeCategories: [...DEFAULT_INCOME_CATEGORIES],
 });
+
+/** Settings for someone opening Elora for the first time: Nigerian number and date formats. */
+export const newUserSettings = (): Settings => ({ ...defaultSettings(), locale: 'en-NG' });
+
+export const newStore = (): Store => emptyStore(newUserSettings());
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isStrArr = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -250,8 +267,8 @@ export function stopRule(d: AppData, id: string, deletePayments: boolean): AppDa
  * `unreadable` stop before anything is saved, so data Elora can't read is never overwritten.
  */
 export type StoreState =
-  | { status: 'ok' | 'empty'; data: AppData }
-  | { status: 'migrated'; data: AppData; from: number; snapshotKey: string }
+  | { status: 'ok' | 'empty'; data: Store }
+  | { status: 'migrated'; data: Store; from: number; snapshotKey: string }
   | { status: 'newer'; version: number; raw: string }
   | { status: 'unreadable'; reason: string; raw: string };
 
@@ -263,13 +280,39 @@ export function completeData(candidate: unknown): AppData | null {
   return isAppData(merged) ? markLegacySamples(merged) : null;
 }
 
+const isTransfer = (v: unknown) =>
+  isObj(v) &&
+  typeof v.id === 'string' &&
+  typeof v.amount === 'number' &&
+  Number.isFinite(v.amount) &&
+  typeof v.date === 'string' &&
+  (v.from === 'personal' || v.from === 'business') &&
+  (v.to === 'personal' || v.to === 'business');
+
+/**
+ * Saved v3 data → a usable store: amounts back to major units, missing settings filled in, and every
+ * book checked like version 2 data always was. Null when anything isn't usable.
+ */
+export function completeStore(candidate: unknown): Store | null {
+  const decoded = decodeStore(candidate);
+  if (!decoded) return null;
+  if (!isTxArray(decoded.unsorted) || !Array.isArray(decoded.transfers) || !decoded.transfers.every(isTransfer)) return null;
+  let s = decoded;
+  for (const book of BOOKS) {
+    const view = completeData(viewOf(s, book));
+    if (!view) return null;
+    s = mergeView(s, book, view);
+  }
+  return { ...s, settings: decoded.settings };
+}
+
 export function openStore(): StoreState {
   let raw = readRaw(KEY);
   let parsed: unknown;
   if (raw == null) {
     // The first version stored two separate keys; it's upgraded like any other old format.
     const oldTx = readJSON('bp.transactions');
-    if (!isTxArray(oldTx)) return { status: 'empty', data: emptyData(defaultSettings()) };
+    if (!isTxArray(oldTx)) return { status: 'empty', data: newStore() };
     parsed = { version: 1, transactions: oldTx, budgets: readJSON('bp.budgets') ?? {} };
     raw = JSON.stringify(parsed);
   } else {
@@ -283,7 +326,7 @@ export function openStore(): StoreState {
   if (version == null) return { status: 'unreadable', reason: 'The saved data doesn’t say which version of Elora saved it.', raw };
   if (version > CURRENT_VERSION) return { status: 'newer', version, raw };
   if (version === CURRENT_VERSION) {
-    const data = completeData(parsed);
+    const data = completeStore(parsed);
     return data ? { status: 'ok', data } : { status: 'unreadable', reason: 'Some of the saved data is missing or isn’t in the shape Elora expects.', raw };
   }
   // An older format: keep a verified copy before changing anything.
@@ -297,7 +340,7 @@ export function openStore(): StoreState {
   }
   const m = migrate(parsed);
   if (!m.ok) return { status: 'unreadable', reason: `${m.reason} Nothing was changed, and a safety copy was kept.`, raw };
-  const data = completeData(m.data);
+  const data = completeStore(m.data);
   if (!data) return { status: 'unreadable', reason: 'The upgraded data didn’t pass Elora’s checks. Nothing was changed, and a safety copy was kept.', raw };
   return { status: 'migrated', data, from: version, snapshotKey };
 }
@@ -347,7 +390,7 @@ export function quarantine(raw: string, now = new Date()): boolean {
   return writeRaw(`bp.unreadable.${now.toISOString()}`, raw);
 }
 
-export const isEmpty = (d: AppData) =>
+export const isEmpty = (d: Pick<AppData, 'transactions' | 'recurring' | 'budgets'>) =>
   d.transactions.length === 0 && d.recurring.length === 0 && Object.keys(d.budgets).length === 0;
 
 /** Add any repeating transactions that have come due. Returns the same object when nothing changed. */
@@ -358,6 +401,17 @@ export function applyRecurring(data: AppData, today: string): AppData {
   if (rules === data.recurring) return data;
   const ids = new Set(data.transactions.map((t) => t.id));
   return { ...data, recurring: rules, transactions: [...data.transactions, ...created.filter((t) => !ids.has(t.id))] };
+}
+
+/** Every book with its repeating items brought up to date. Same object when nothing changed. */
+export function applyRecurringAll(s: Store, today: string): Store {
+  let next = s;
+  for (const book of BOOKS) {
+    const view = viewOf(next, book);
+    const updated = applyRecurring(view, today);
+    if (updated !== view) next = mergeView(next, book, updated);
+  }
+  return next;
 }
 
 export function emptyData(settings: Settings): AppData {
@@ -408,6 +462,60 @@ export function changeBaseCurrency(d: AppData, newBase: string, mode: 'convert' 
     : d.budgets;
 
   return { ...d, transactions, recurring, budgets, settings: { ...d.settings, currency: newBase } };
+}
+
+/** Change the base currency for everything: both books, unsorted payments and transfers. */
+export function changeStoreCurrency(s: Store, newBase: string, mode: 'convert' | 'relabel', rate = 1): Store {
+  const oldBase = s.settings.currency;
+  if (newBase === oldBase) return s;
+  let next = s;
+  // Each book is converted from the original store, so the second book still sees the old currency.
+  for (const book of BOOKS) next = mergeView(next, book, changeBaseCurrency(viewOf(s, book), newBase, mode, rate));
+  const unsorted = changeBaseCurrency({ ...viewOf(s, 'personal'), transactions: s.unsorted, recurring: [], budgets: {} }, newBase, mode, rate).transactions;
+  const convert = mode === 'convert' && !!oldBase;
+  const transfers = convert ? s.transfers.map((t) => ({ ...t, amount: round2(t.amount * rate) })) : s.transfers;
+  return { ...next, unsorted, transfers };
+}
+
+/* ---------- Money boxes ---------- */
+
+/** A repeating bill for a money box: its amount, day of the month, and every month or every year. */
+export interface BoxRepeat {
+  amount: number;
+  day: number;
+  every: 1 | 12;
+}
+
+/** The active repeating bill that fills a money box (same category), if any. */
+export const boxRule = (d: AppData, category: string) =>
+  d.recurring.find((r) => r.type === 'expense' && r.category === category && !r.paused);
+
+/**
+ * Create or change a money box: its monthly limit and, optionally, the bill that repeats in it.
+ * - A new name also becomes a spending category.
+ * - With `repeat`, the box's bill is created or changed. A new bill starts this month if its day is
+ *   still to come, otherwise next month, so nothing already paid is recorded twice.
+ * - Without it, an existing bill stops; its past payments stay.
+ */
+export function saveBox(d: AppData, name: string, limit: number, repeat: BoxRepeat | null, today: string): AppData {
+  let x = d.settings.expenseCategories.includes(name) ? d : addCategory(d, 'expense', name);
+  x = { ...x, budgets: { ...x.budgets, [name]: limit } };
+  const existing = boxRule(x, name);
+  if (!repeat) return existing ? stopRule(x, existing.id, false) : x;
+  if (existing) {
+    const r: RecurringRule = { ...existing, amount: repeat.amount, day: repeat.day };
+    // The amount is entered in the base currency.
+    delete r.currency;
+    delete r.rate;
+    if (repeat.every === 12) r.everyMonths = 12;
+    else delete r.everyMonths;
+    return { ...x, recurring: x.recurring.map((y) => (y.id === existing.id ? r : y)) };
+  }
+  const month = monthOf(today);
+  const startMonth = repeat.day >= Number(today.slice(8, 10)) ? month : shiftMonth(month, 1);
+  const rule: RecurringRule = { id: newId(), type: 'expense', amount: repeat.amount, category: name, note: name, day: repeat.day, startMonth };
+  if (repeat.every === 12) rule.everyMonths = 12;
+  return applyRecurring({ ...x, recurring: [...x.recurring, rule] }, today);
 }
 
 /* ---------- Categories ---------- */
@@ -470,13 +578,26 @@ export interface SaveStatus {
   newerElsewhere: boolean;
 }
 
-export function useAppData(initial: AppData) {
-  const [data, setRaw] = useState<AppData>(() => withAutoSavings(applyRecurring(initial, todayISO())));
+/** Automatic savings kept in step in every book. */
+export function withAutoSavingsAll(s: Store): Store {
+  let next = s;
+  for (const book of BOOKS) {
+    const view = viewOf(next, book);
+    const updated = withAutoSavings(view);
+    if (updated !== view) next = mergeView(next, book, updated);
+  }
+  return next;
+}
+
+export const encodeForSave = (s: Store) => JSON.stringify(encodeStore(s));
+
+export function useStore(initial: Store) {
+  const [store, setRaw] = useState<Store>(() => withAutoSavingsAll(applyRecurringAll(initial, todayISO())));
   const [status, setStatus] = useState<SaveStatus>({ saveFailed: false, newerElsewhere: false });
 
   // Every change (adding, editing, deleting, importing, undo) keeps automatic savings in step.
-  const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
-    (update) => setRaw((d) => withAutoSavings(typeof update === 'function' ? update(d) : update)),
+  const setStore = useCallback<Dispatch<SetStateAction<Store>>>(
+    (update) => setRaw((s) => withAutoSavingsAll(typeof update === 'function' ? update(s) : update)),
     [],
   );
 
@@ -484,12 +605,12 @@ export function useAppData(initial: AppData) {
   const lastSaved = useRef<string | null>(readRaw(KEY));
   useEffect(() => {
     if (status.newerElsewhere) return;
-    const text = JSON.stringify(data);
+    const text = encodeForSave(store);
     if (text === lastSaved.current) return;
     const ok = writeRaw(KEY, text);
     if (ok) lastSaved.current = text;
     setStatus((s) => (s.saveFailed === !ok ? s : { ...s, saveFailed: !ok }));
-  }, [data, status.newerElsewhere]);
+  }, [store, status.newerElsewhere]);
 
   // Another tab saved: take its data instead of overwriting it with ours.
   useEffect(() => {
@@ -506,7 +627,7 @@ export function useAppData(initial: AppData) {
         setStatus((s) => ({ ...s, newerElsewhere: true }));
         return;
       }
-      const next = v === CURRENT_VERSION ? completeData(parsed) : null;
+      const next = v === CURRENT_VERSION ? completeStore(parsed) : null;
       if (!next) return;
       lastSaved.current = e.newValue;
       setRaw(next);
@@ -518,13 +639,13 @@ export function useAppData(initial: AppData) {
   // If the tab is left open across a due date, add the new transactions when it's shown again.
   useEffect(() => {
     const onShow = () => {
-      if (document.visibilityState === 'visible') setData((d) => applyRecurring(d, todayISO()));
+      if (document.visibilityState === 'visible') setStore((s) => applyRecurringAll(s, todayISO()));
     };
     document.addEventListener('visibilitychange', onShow);
     return () => document.removeEventListener('visibilitychange', onShow);
-  }, [setData]);
+  }, [setStore]);
 
-  return [data, setData, status] as const;
+  return [store, setStore, status] as const;
 }
 
 /**

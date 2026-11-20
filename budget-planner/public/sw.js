@@ -1,5 +1,7 @@
 // Elora service worker: makes the app load offline. User data lives in localStorage, not here.
-const CACHE = 'elora-v2';
+// Bump this whenever an icon, the manifest or another un-hashed file changes,
+// so installed copies drop the old files instead of serving them from the cache.
+const CACHE = 'elora-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { hrefFor, type Route } from '../../lib/route';
 import { BrandMark, BrandWordmark, Icon, type IconName } from '../ui/Icon';
 import { Modal } from '../Modal';
@@ -6,18 +6,19 @@ import { Modal } from '../Modal';
 interface NavEntry { route: Route; label: string; icon: IconName }
 
 const PRIMARY: NavEntry[] = [
-  { route: 'overview', label: 'Overview', icon: 'overview' },
+  { route: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { route: 'overview', label: 'Overview', icon: 'insights' },
   { route: 'transactions', label: 'Transactions', icon: 'transactions' },
   { route: 'budgets', label: 'Budgets', icon: 'budgets' },
   { route: 'savings', label: 'Savings', icon: 'savings' },
-  { route: 'insights', label: 'Insights', icon: 'insights' },
+  { route: 'insights', label: 'Insights', icon: 'bulb' },
 ];
 const SECONDARY: NavEntry[] = [
   { route: 'plans', label: 'Plan', icon: 'plans' },
   { route: 'settings', label: 'Settings', icon: 'settings' },
 ];
 /** Bottom tab bar on phones: four destinations plus "More". */
-const TABS: Route[] = ['overview', 'transactions', 'budgets', 'savings'];
+const TABS: Route[] = ['dashboard', 'overview', 'transactions', 'savings'];
 
 function NavLink({ entry, active }: { entry: NavEntry; active: boolean }) {
   return (
@@ -34,7 +35,7 @@ function NavLink({ entry, active }: { entry: NavEntry; active: boolean }) {
 export function Sidebar({ route, online, onInstall }: { route: Route; online: boolean; onInstall: (() => void) | null }) {
   return (
     <aside className="sidebar" aria-label="Main">
-      <a href={hrefFor('overview')} className="brand" aria-label="Elora, go to overview">
+      <a href={hrefFor('dashboard')} className="brand" aria-label="Elora, go to the dashboard">
         <BrandMark />
         <BrandWordmark />
       </a>
@@ -70,7 +71,7 @@ export function Sidebar({ route, online, onInstall }: { route: Route; online: bo
 export function MobileTopBar({ online }: { online: boolean }) {
   return (
     <header className="topbar-mobile">
-      <a href={hrefFor('overview')} className="brand" aria-label="Elora, go to overview">
+      <a href={hrefFor('dashboard')} className="brand" aria-label="Elora, go to the dashboard">
         <BrandMark />
         <BrandWordmark />
       </a>
@@ -179,12 +180,79 @@ export function MoreSheet({ open, onClose, route, onImport, onExport, onBackup, 
   );
 }
 
-/** The phone's floating "add transaction" button. */
-export function AddFab({ onClick }: { onClick: () => void }) {
+export interface AddMenuItem {
+  label: string;
+  icon: IconName;
+  /** Colour of the icon: income, spending, savings or neutral. */
+  tone?: 'in' | 'out' | 'save';
+  onClick: () => void;
+}
+
+/**
+ * The floating + button. With one option it acts straight away; with more it opens a short list of
+ * labelled options above it (Add expense, Add income, Pay yourself…). Escape or a tap outside closes it.
+ */
+export function AddMenu({ items }: { items: AddMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        wrap.current?.querySelector<HTMLButtonElement>('.fab')?.focus();
+      }
+    };
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open]);
+  if (items.length === 1) {
+    return (
+      <button type="button" className="fab" onClick={items[0].onClick} aria-label={items[0].label}>
+        <Icon name="plus" size={26} />
+      </button>
+    );
+  }
   return (
-    <button type="button" className="fab" onClick={onClick} aria-label="Add transaction">
-      <Icon name="plus" size={26} />
-    </button>
+    <div className="add-menu" ref={wrap}>
+      {open && <div className="add-menu-scrim" aria-hidden="true" />}
+      {open && (
+        <ul className="add-menu-list" id="add-menu-list">
+          {items.map((it) => (
+            <li key={it.label}>
+              <button
+                type="button"
+                className="add-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  it.onClick();
+                }}
+              >
+                <span className="add-menu-label">{it.label}</span>
+                <span className={`add-menu-icon ${it.tone ?? ''}`}><Icon name={it.icon} size={19} /></span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        className={open ? 'fab is-open' : 'fab'}
+        aria-label={open ? 'Close the add menu' : 'Add'}
+        aria-expanded={open}
+        aria-controls="add-menu-list"
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name="plus" size={26} />
+      </button>
+    </div>
   );
 }
 

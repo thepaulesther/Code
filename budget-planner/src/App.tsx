@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { BudgetPanel } from './components/BudgetPanel';
 import { SpendingDonut, TrendChart } from './components/Charts';
 import { ExportDialog } from './components/ExportDialog';
@@ -9,6 +9,8 @@ import { Modal } from './components/Modal';
 import { TransactionForm, type RepeatEvery, type SubmitOptions } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import {
+  appLocale,
+  setAppLocale,
   budgetStatus,
   effectiveInMonth,
   formatMoney,
@@ -36,7 +38,6 @@ import { conversionRate, useRates } from './lib/currency';
 import { dueOccurrences, materialize, ordinal, resumeRule, type RecurringRule } from './lib/recurring';
 import {
   applyRecurring,
-  changeBaseCurrency,
   editTransaction,
   hasSamples,
   addToGoal,
@@ -46,9 +47,16 @@ import {
   removeSamples,
   saveGoal,
   stopRule,
-  useAppData,
+  boxRule,
+  saveBox as saveBoxIn,
+  type BoxRepeat,
+  changeStoreCurrency,
+  encodeForSave,
+  applyRecurringAll,
+  useStore,
   useToday,
 } from './lib/store';
+import { addTransfer, addUnsorted, bookBalance, sortInto, splitUnsorted, activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
 import { PlanCard, PlanGlossary } from './components/PlanCard';
@@ -70,7 +78,11 @@ import { arrangeRows, useLayoutPrefs, type SectionId } from './lib/layout';
 import { MonthEndCard } from './components/overview/MonthEndCard';
 import { CustomiseOverview } from './components/overview/CustomiseOverview';
 import { ComingUp } from './components/overview/ComingUp';
-import { AddFab, Main, MobileTopBar, MoreSheet, Sidebar, TabBar } from './components/layout/AppShell';
+import { AddMenu, Main, MobileTopBar, MoreSheet, Sidebar, TabBar, type AddMenuItem } from './components/layout/AppShell';
+import { Dashboard } from './components/dashboard/Dashboard';
+import { PayYourself } from './components/dashboard/PayYourself';
+import { BoxForm } from './components/dashboard/BoxForm';
+import { QuickSale } from './components/dashboard/QuickSale';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Icon } from './components/ui/Icon';
 import { MonthSwitcher, PageHeader } from './components/ui/PageHeader';
@@ -112,6 +124,7 @@ const greeting = () => {
 };
 
 const PAGE_TITLES: Record<Route, string> = {
+  dashboard: 'Dashboard',
   overview: 'Overview',
   transactions: 'Transactions',
   budgets: 'Budgets',
@@ -125,28 +138,81 @@ type DialogName = 'import' | 'export' | null;
 
 export default function App({ initial, notice }: {
   /** The saved data, already opened and checked (see Root). */
-  initial: AppData;
+  initial: Store;
   /** A message to show once on start, e.g. after an upgrade. */
   notice?: string;
 }) {
-  const [data, setData, saveStatus] = useAppData(initial);
+  const [store, setStore, saveStatus] = useStore(initial);
+  // Screens show one book at a time (Personal, or Business when business mode is on).
+  const book = activeBook(store);
+  const data = useMemo(() => viewOf(store, book), [store, book]);
+  const setData = useCallback<Dispatch<SetStateAction<AppData>>>(
+    (update) =>
+      setStore((s) => {
+        const b = activeBook(s);
+        const view = viewOf(s, b);
+        const next = typeof update === 'function' ? update(view) : update;
+        return next === view ? s : mergeView(s, b, next);
+      }),
+    [setStore],
+  );
   // Today, kept current while the app stays open (it may be left open across a due date or a month end).
   const today = useToday();
   const CURRENT_MONTH = monthOf(today);
   // When the date changes, add repeating payments that have come due.
   useEffect(() => {
-    setData((d) => applyRecurring(d, today));
-  }, [today, setData]);
+    setStore((s) => applyRecurringAll(s, today));
+  }, [today, setStore]);
   const { transactions, budgets, recurring, settings } = data;
+  // Numbers and dates follow the chosen format (set before anything below is formatted).
+  setAppLocale(settings.locale);
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [dialog, setDialog] = useState<DialogName>(null);
   const route = useRoute();
   const [adding, setAdding] = useState<TxType | null>(null);
   // "Add a repeating bill" opens the form already set to repeat monthly.
   const [addingRepeat, setAddingRepeat] = useState(false);
-  const openAdd = (type: TxType | null, repeat = false) => {
+  // "Add expense" from a money box starts on that box's category.
+  const [addingCategory, setAddingCategory] = useState<string | undefined>(undefined);
+  const openAdd = (type: TxType | null, repeat = false, category?: string) => {
     setAddingRepeat(repeat);
+    setAddingCategory(category);
     setAdding(type);
+  };
+  const [paying, setPaying] = useState(false);
+  // Quick sale / pasted bank alerts: which tab the sheet opens on.
+  const [quickSale, setQuickSale] = useState<'enter' | 'paste' | null>(null);
+  const saveQuick = (txs: Transaction[]) => {
+    const before = data;
+    setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
+    setQuickSale(null);
+    const total = txs.reduce((s, x) => s + (x.type === 'income' ? x.amount : 0), 0);
+    setToast(
+      txs.length === 1
+        ? `Recorded ${txs[0].type === 'income' ? '+' : '−'}${money(txs[0].amount)}${txs[0].note ? ` · ${txs[0].note}` : ''}.`
+        : `Added ${txs.length} payments${total ? `, ${money(total)} in` : ''}.`,
+      () => setData(before),
+    );
+  };
+  // The money box form: {} for a new box, or the box being changed.
+  const [boxForm, setBoxForm] = useState<{ editing?: { category: string; limit: number } } | null>(null);
+  const saveBox = (name: string, amount: number, repeat: BoxRepeat | null) => {
+    const before = data;
+    const isNew = !boxForm?.editing;
+    setData((d) => saveBoxIn(d, name, amount, repeat, todayISO()));
+    setBoxForm(null);
+    const bill = repeat ? ` A ${money(repeat.amount)} bill repeats ${repeat.every === 12 ? 'yearly' : 'monthly'} on day ${repeat.day}.` : '';
+    setToast((isNew ? `Added the ${name} box: ${money(amount)} a month.` : `${name} now holds ${money(amount)} a month.`) + bill, () => setData(before));
+  };
+  const removeBox = (name: string) => {
+    const before = data;
+    setData((d) => {
+      const budgets = { ...d.budgets };
+      delete budgets[name];
+      return { ...d, budgets };
+    });
+    setBoxForm(null);
+    setToast(`Removed the ${name} box. Its payments are kept.`, () => setData(before));
   };
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -183,7 +249,7 @@ export default function App({ initial, notice }: {
   const byCategory = useMemo(() => spendingByCategory(monthTx), [monthTx]);
   const trend = useMemo(() => monthlyTrend(transactions, month, 6), [transactions, month]);
   const status = useMemo(() => budgetStatus(monthTx, budgets), [monthTx, budgets]);
-  const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions) : ''), [dialog, transactions]);
+  const csv = useMemo(() => (dialog === 'export' ? toCSV(transactions, store.settings.business ? bookName(book) : undefined) : ''), [dialog, transactions, store.settings.business, book]);
 
   // ---- Monthly plan, goals and alerts ----
   const goals = useMemo(() => data.goals ?? [], [data.goals]);
@@ -373,6 +439,14 @@ export default function App({ initial, notice }: {
   };
 
   const importTxs = (txs: Transaction[]) => {
+    // With business mode on, imported rows wait on the Dashboard to be sorted into Personal or Business.
+    if (store.settings.business) {
+      setStore((s) => addUnsorted(s, txs));
+      setDialog(null);
+      navigate('dashboard');
+      setToast(`Imported ${txs.length} ${txs.length === 1 ? 'payment' : 'payments'}. Sort ${txs.length === 1 ? 'it' : 'them'} into Personal or Business on the Dashboard.`);
+      return;
+    }
     setData((d) => ({ ...d, transactions: [...d.transactions, ...txs] }));
     const latest = txs.reduce((m, x) => (x.date > m ? x.date : m), '');
     if (latest) setMonth(monthOf(latest));
@@ -386,7 +460,7 @@ export default function App({ initial, notice }: {
   // Comparing with the previous route (not a "first run" flag) keeps StrictMode's double effect harmless.
   const prevRoute = useRef(route);
   useEffect(() => {
-    document.title = route === 'overview' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
+    document.title = route === 'dashboard' ? 'Elora' : `${PAGE_TITLES[route]} · Elora`;
     if (prevRoute.current === route) return;
     prevRoute.current = route;
     window.scrollTo(0, 0);
@@ -403,25 +477,51 @@ export default function App({ initial, notice }: {
   const [restoring, setRestoring] = useState<string | null>(null); // null: closed; '' : choose a file; text: check it
   const [backupText, setBackupText] = useState<string | null>(null);
   const backup = () => {
-    void createBackup(data).then((text) => {
+    void createBackup(store).then((text) => {
       if (IS_ARTIFACT || !downloadText(`elora-backup-${fileDate()}.json`, text)) setBackupText(text);
       else setToast('Downloaded a full backup. Keep it somewhere safe, such as your email or cloud storage.');
     });
   };
-  const restore = (next: AppData) => {
-    const before = data;
+  const restore = (next: Store) => {
+    const before = store;
     // Never replace data without a safety copy.
-    if (!takeSnapshot('restore', JSON.stringify(before))) {
+    if (!takeSnapshot('restore', encodeForSave(before))) {
       setToast('Restore cancelled: Elora couldn’t keep a safety copy of your current data (browser storage may be full).');
       return;
     }
-    setData(next);
+    setStore(next);
     setRestoring(null);
     setMonth(CURRENT_MONTH);
-    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setData(before));
+    setToast('Restored your backup. Your previous data is kept as a safety copy in Settings.', () => setStore(before));
   };
 
-  const chooseBase = (c: string) => setData((d) => changeBaseCurrency(d, c, 'relabel'));
+  const addMenuItems: AddMenuItem[] = [
+    ...(book === 'business' ? [{ label: 'Record sale', icon: 'tag' as const, tone: 'in' as const, onClick: () => setQuickSale('enter') }] : []),
+    ...(settings.currency ? [{ label: 'Paste bank alert', icon: 'import' as const, tone: 'in' as const, onClick: () => setQuickSale('paste') }] : []),
+    { label: 'Add expense', icon: 'arrow-out', tone: 'out', onClick: () => openAdd('expense') },
+    ...(book === 'business' ? [] : [{ label: 'Add income', icon: 'arrow-in' as const, tone: 'in' as const, onClick: () => openAdd('income') }]),
+    ...(store.settings.business ? [{ label: book === 'business' ? 'Pay yourself' : 'Move money between sides', icon: 'transactions' as const, tone: 'save' as const, onClick: () => setPaying(true) }] : []),
+    ...(settings.currency ? [{ label: 'Move to savings', icon: 'savings' as const, tone: 'save' as const, onClick: () => navigate('savings') }] : []),
+    { label: 'New money box', icon: 'plus', onClick: () => setBoxForm({}) },
+  ];
+  const payYourself = (tr: { from: Book; to: Book; amount: number; date: string; note: string }) => {
+    const before = store;
+    setStore((s) => addTransfer(s, tr));
+    setPaying(false);
+    setToast(`Moved ${money(tr.amount)} from ${bookName(tr.from)} to ${bookName(tr.to)}.`, () => setStore(before));
+  };
+
+  const chooseBase = (c: string) => setStore((s) => changeStoreCurrency(s, c, 'relabel'));
+  const changeCurrency = (c: string, mode: 'convert' | 'relabel', rate: number) =>
+    setStore((s) => changeStoreCurrency(s, c, mode, rate));
+  const switchBook = (b: Book) => {
+    setToast(null); // an "Undo" belongs to the book it was made in
+    setStore((s) => setActiveBook(s, b));
+  };
+  const setBusiness = (on: boolean) => {
+    setToast(null);
+    setStore((s) => setBusinessMode(s, on));
+  };
   const seeAll = (r: Route, label = 'See all') => (
     <a className="link-more" href={hrefFor(r)}>
       {label}
@@ -455,6 +555,7 @@ export default function App({ initial, notice }: {
   );
 
   const hasCurrency = !!settings.currency;
+  const biz = book === 'business';
   const setupSteps: SetupStep[] = [
     {
       id: 'currency',
@@ -464,39 +565,61 @@ export default function App({ initial, notice }: {
       optional: false,
       content: <CurrencySelect id="welcome-currency" label="Base currency" value={settings.currency} onChange={chooseBase} />,
     },
-    {
-      id: 'income',
-      title: 'Add your income',
-      detail: 'Your salary or any other money coming in. Set it to repeat if it arrives every month.',
-      done: transactions.some((x) => x.type === 'income'),
-      optional: true,
-      action: { label: 'Add income', onClick: () => setAdding('income'), disabled: !hasCurrency },
-    },
-    {
-      id: 'expense',
-      title: 'Record your spending',
-      detail: (
-        <>
-          Start with the big ones: rent, bills, groceries. Rent paid once a year? Choose <strong>Repeats: Every year</strong>{' '}
-          and it counts as a twelfth in each month.
-        </>
-      ),
-      done: transactions.some((x) => x.type === 'expense'),
-      optional: true,
-      action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
-    },
+    biz
+      ? {
+          id: 'income',
+          title: 'Record a sale',
+          detail: 'Money your business takes in: cash, transfer or POS. Record a day’s sales as one entry if that’s easier.',
+          done: transactions.some((x) => x.type === 'income'),
+          optional: true,
+          action: { label: 'Record sale', onClick: () => setQuickSale('enter'), disabled: !hasCurrency },
+        }
+      : {
+          id: 'income',
+          title: 'Add your income',
+          detail: 'Your salary or any other money coming in. Set it to repeat if it arrives every month.',
+          done: transactions.some((x) => x.type === 'income'),
+          optional: true,
+          action: { label: 'Add income', onClick: () => setAdding('income'), disabled: !hasCurrency },
+        },
+    biz
+      ? {
+          id: 'expense',
+          title: 'Record a business expense',
+          detail: 'Stock, shop rent, staff pay, delivery. Set rent and staff pay to repeat so they’re added on their day.',
+          done: transactions.some((x) => x.type === 'expense'),
+          optional: true,
+          action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
+        }
+      : {
+          id: 'expense',
+          title: 'Record your spending',
+          detail: (
+            <>
+              Start with the big ones: rent, bills, groceries. Rent paid once a year? Choose <strong>Repeats: Every year</strong>{' '}
+              and it counts as a twelfth in each month.
+            </>
+          ),
+          done: transactions.some((x) => x.type === 'expense'),
+          optional: true,
+          action: { label: 'Add expense', onClick: () => setAdding('expense'), disabled: !hasCurrency },
+        },
     {
       id: 'budgets',
-      title: 'Set monthly budgets',
-      detail: 'Pick limits for the categories you want to keep an eye on.',
+      title: biz ? 'Set up business boxes' : 'Set up money boxes',
+      detail: biz
+        ? 'Monthly limits for stock, shop rent, staff pay and delivery, so you see what’s left at a glance.'
+        : 'Monthly limits for rent, groceries, transport and anything else you want to keep an eye on.',
       done: Object.keys(budgets).length > 0,
       optional: true,
-      action: { label: 'Set budgets', onClick: () => navigate('budgets'), disabled: !hasCurrency },
+      action: { label: 'Add a box', onClick: () => setBoxForm({}), disabled: !hasCurrency },
     },
     {
       id: 'goal',
-      title: 'Set a savings goal',
-      detail: 'An emergency fund of about three months of spending is a good first goal.',
+      title: biz ? 'Set a business savings goal' : 'Set a savings goal',
+      detail: biz
+        ? 'Money for new equipment, a slow month or expanding the shop.'
+        : 'An emergency fund of about three months of spending is a good first goal.',
       done: goals.length > 0,
       optional: true,
       action: { label: 'Add a goal', onClick: () => setGoalDialog('new'), disabled: !hasCurrency },
@@ -504,7 +627,14 @@ export default function App({ initial, notice }: {
   ];
   const showSetup = !setup.prefs.hidden && !setupSteps.every((x) => x.done);
   const setupGuide = showSetup && (
-    <SetupGuide steps={setupSteps} skipped={setup.prefs.skipped} onSkip={setup.skip} onUnskip={setup.unskip} onHide={setup.hide} />
+    <SetupGuide
+      title={biz ? 'Set up your business' : 'Set up Elora'}
+      steps={setupSteps}
+      skipped={setup.prefs.skipped}
+      onSkip={setup.skip}
+      onUnskip={setup.unskip}
+      onHide={setup.hide}
+    />
   );
 
   // On the Overview the quick actions already offer "Add"; the floating button appears once they scroll away.
@@ -883,15 +1013,60 @@ export default function App({ initial, notice }: {
           </>
         );
 
+      case 'dashboard':
+        return (
+          <>
+            <PageHeader
+              eyebrow={new Date().toLocaleDateString(appLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+              title={greeting()}
+              subtitle={store.settings.business ? `${bookName(book)} money this month.` : 'Your money this month.'}
+              actions={addButton}
+            />
+            <Dashboard
+              store={store}
+              book={book}
+              view={data}
+              today={today}
+              plan={currentPlan}
+              top={<>{setupGuide}{sampleBanner}{alertBanner}</>}
+              onAdd={(type, category) => (type === 'income' && book === 'business' && !category ? setQuickSale('enter') : openAdd(type, false, category))}
+              onNewBox={() => setBoxForm({})}
+              onEditBox={(category, limit) => setBoxForm({ editing: { category, limit } })}
+              onPay={store.settings.business ? () => setPaying(true) : undefined}
+              onSort={(id, b) => {
+                const before = store;
+                const item = store.unsorted.find((u) => u.id === id);
+                setStore((s) => sortInto(s, id, b));
+                setToast(`${item?.note || item?.category || 'Payment'} moved to ${bookName(b)}.`, () => setStore(before));
+              }}
+              onSplit={(id, part) => {
+                const before = store;
+                setStore((s) => splitUnsorted(s, id, part));
+                setToast('Split between Business and Personal.', () => setStore(before));
+              }}
+              seeTransactions={hrefFor('transactions')}
+              seeSavings={hrefFor('savings')}
+              seePlan={hrefFor('plans')}
+            />
+          </>
+        );
+
       case 'settings':
         return (
           <>
             <PageHeader title="Settings" subtitle="Appearance, currency, plan and alerts, categories and your data." />
             <SettingsPanel
+              onChangeCurrency={changeCurrency}
+              onBusiness={setBusiness}
+              onDeleteAll={() => {
+                if (!takeSnapshot('reset', encodeForSave(store))) return false;
+                setStore((s) => emptyStore({ ...viewOf(s, 'personal').settings, book: 'personal' }));
+                return true;
+              }}
               onReset={() => {
                 setup.reset();
                 layout.reset();
-                navigate('overview');
+                navigate('dashboard');
               }}
               onExport={() => setDialog('export')}
               onBackup={backup}
@@ -904,7 +1079,7 @@ export default function App({ initial, notice }: {
               setupHidden={setup.prefs.hidden}
               onShowSetup={() => {
                 setup.show();
-                navigate('overview');
+                navigate('dashboard');
               }}
               onCustomiseOverview={() => setCustomising(true)}
               data={data}
@@ -921,7 +1096,7 @@ export default function App({ initial, notice }: {
           <>
             {/* ---- Overview ---- */}
             <PageHeader
-              eyebrow={new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+              eyebrow={new Date().toLocaleDateString(appLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
               title={greeting()}
               subtitle={
                 !hasAnyTransactions
@@ -1006,6 +1181,18 @@ export default function App({ initial, notice }: {
         <Sidebar route={route} online={online} onInstall={install} />
         <MobileTopBar online={online} />
         <Main>
+          {store.settings.business && (
+            <div className={book === 'business' ? 'book-bar is-business' : 'book-bar'}>
+              <div className="segmented book-switch" role="radiogroup" aria-label="Show Personal or Business money">
+                {(['personal', 'business'] as const).map((b) => (
+                  <button key={b} type="button" role="radio" aria-checked={book === b} className={book === b ? 'is-on' : ''} onClick={() => switchBook(b)}>
+                    {bookName(b)}
+                  </button>
+                ))}
+              </div>
+              {book === 'business' && <span className="book-tag">Business</span>}
+            </div>
+          )}
           {saveStatus.newerElsewhere && (
             <div className="alert-banner level-over-plan" role="alert">
               <span className="alert-icon"><Icon name="alert" size={20} /></span>
@@ -1028,7 +1215,7 @@ export default function App({ initial, notice }: {
           <ErrorBoundary resetKey={route}>{page}</ErrorBoundary>
         </Main>
         <TabBar route={route} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
-        {route !== 'settings' && !quickActionsVisible && <AddFab onClick={() => setAdding('expense')} />}
+        {route !== 'settings' && !quickActionsVisible && <AddMenu items={addMenuItems} />}
 
         <MoreSheet
           open={moreOpen}
@@ -1041,13 +1228,71 @@ export default function App({ initial, notice }: {
           canImport={!!settings.currency}
           canExport={transactions.length > 0}
         />
-        <Modal open={adding != null} onClose={() => openAdd(null)} title="Add transaction">
+        <Modal
+          open={boxForm != null}
+          onClose={() => setBoxForm(null)}
+          title={boxForm?.editing ? `Edit ${boxForm.editing.category}` : `New money box${store.settings.business ? ` · ${bookName(book)}` : ''}`}
+        >
+          {boxForm && (
+            <BoxForm
+              key={boxForm.editing?.category ?? 'new'}
+              editing={boxForm.editing}
+              repeat={(() => {
+                const r = boxForm.editing && boxRule(data, boxForm.editing.category);
+                return r ? { amount: r.amount, day: r.day, every: r.everyMonths === 12 ? 12 : 1 } : undefined;
+              })()}
+              today={today}
+              categories={settings.expenseCategories}
+              boxes={Object.keys(budgets).filter((k) => budgets[k] > 0)}
+              onSave={saveBox}
+              onRemove={boxForm.editing ? () => removeBox(boxForm.editing!.category) : undefined}
+              onCancel={() => setBoxForm(null)}
+            />
+          )}
+        </Modal>
+        <Modal open={quickSale != null} onClose={() => setQuickSale(null)} title={book === 'business' ? 'Record a sale' : 'Add money in'}>
+          {quickSale && (
+            <QuickSale
+              book={book}
+              tab={quickSale}
+              incomeCategories={settings.incomeCategories}
+              expenseCategories={settings.expenseCategories}
+              existing={transactions}
+              onSave={saveQuick}
+              onFullForm={() => {
+                setQuickSale(null);
+                openAdd('income');
+              }}
+              onCancel={() => setQuickSale(null)}
+            />
+          )}
+        </Modal>
+        <Modal open={paying} onClose={() => setPaying(false)} title="Move money between your sides">
+          {paying && (
+            <PayYourself
+              balances={{ personal: bookBalance(store, 'personal', CURRENT_MONTH), business: bookBalance(store, 'business', CURRENT_MONTH) }}
+              onSave={payYourself}
+              onCancel={() => setPaying(false)}
+            />
+          )}
+        </Modal>
+        <Modal
+          open={adding != null}
+          onClose={() => openAdd(null)}
+          title={store.settings.business ? `Add to ${bookName(book)}` : 'Add transaction'}
+        >
+          {adding && store.settings.business && (
+            <p className={book === 'business' ? 'adding-to is-business' : 'adding-to'}>
+              Adding to <strong>{bookName(book)}</strong>. Switch at the top of the page to add to {bookName(book === 'business' ? 'personal' : 'business')} instead.
+            </p>
+          )}
           {adding && (
             <TransactionForm
-              key={`${adding}-${addingRepeat}`}
+              key={`${adding}-${addingRepeat}-${addingCategory ?? ''}`}
               bare
               initialType={adding}
               initialRepeat={addingRepeat ? 1 : 0}
+              initialCategory={addingCategory}
               expenseCategories={settings.expenseCategories}
               incomeCategories={settings.incomeCategories}
               rates={data.rates}
@@ -1100,7 +1345,7 @@ export default function App({ initial, notice }: {
           open={restoring != null}
           onClose={() => setRestoring(null)}
           initialText={restoring || undefined}
-          current={data}
+          current={store}
           onRestore={restore}
         />
         <Modal open={backupText != null} onClose={() => setBackupText(null)} title="Your backup">
