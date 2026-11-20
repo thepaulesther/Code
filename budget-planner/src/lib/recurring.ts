@@ -22,6 +22,8 @@ export interface RecurringRule {
   paused?: boolean;
   /** Part of the example data; its transactions are examples too. */
   sample?: boolean;
+  /** When this record last changed (ISO time), for merging two devices later. */
+  updatedAt?: string;
 }
 
 export const intervalOf = (rule: Pick<RecurringRule, 'everyMonths'>) =>

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { upgradeV2toV3 } from '../src/lib/books';
+import { upgradeV2toV3, upgradeV3toV4 } from '../src/lib/books';
 import { expect, sampleData, stored, storedRaw, test } from './fixtures';
 
 /** Saved data is never overwritten without confirmation, and backups restore exactly. */
@@ -38,7 +38,7 @@ test.describe('data Elora can’t use safely is never overwritten', () => {
   });
 
   test('opening the app writes nothing when nothing changed', async ({ page, seed }) => {
-    const text = JSON.stringify(upgradeV2toV3(sampleData()));
+    const text = JSON.stringify(upgradeV3toV4(upgradeV2toV3(sampleData())));
     await seed(text);
     await page.goto('/');
     await expect(page.locator('[data-testid="dash-balance"]')).toBeVisible();
@@ -52,7 +52,7 @@ test.describe('data Elora can’t use safely is never overwritten', () => {
     await page.goto('/');
     await expect(page.locator('.toast')).toContainText('upgraded');
     const saved = await storedRaw(page);
-    expect(saved.version).toBe(3);
+    expect(saved.version).toBe(4);
     // Amounts are saved in pence/kobo, and read back exactly.
     expect(saved.books.personal.transactions[0].amount).toBe((v2.transactions[0].amount as number) * 100);
     const view = await stored(page);
@@ -130,7 +130,9 @@ test('a full backup restores exactly, after refusing damaged and foreign files',
   await page.check('#restore-confirm');
   await page.click('button:has-text("Replace my data")');
   const restored = await stored(page);
-  for (const key of ['transactions', 'recurring', 'budgets', 'goals'] as const) expect(restored[key]).toEqual(original[key]);
+  // Restored records are marked as changed now (for syncing later); everything else is exactly the backup.
+  const unstamp = (v: unknown) => JSON.parse(JSON.stringify(v, (k, x) => (k === 'updatedAt' ? undefined : x)));
+  for (const key of ['transactions', 'recurring', 'budgets', 'goals'] as const) expect(unstamp(restored[key])).toEqual(original[key]);
   expect(restored.settings.currency).toBe(original.settings.currency);
 
   await page.click('.toast .toast-action');

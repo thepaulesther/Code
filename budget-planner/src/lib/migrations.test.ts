@@ -54,7 +54,7 @@ describe('migrate', () => {
     const v1 = { version: 1, transactions: v2.transactions, budgets: { Groceries: 300 } };
     const before = JSON.stringify(v1);
     const r = migrate(v1);
-    expect(r).toMatchObject({ ok: true, from: 1, steps: 2, data: { version: CURRENT_VERSION, books: { personal: { budgets: { Groceries: 30_000 }, recurring: [] } } } });
+    expect(r).toMatchObject({ ok: true, from: 1, steps: 3, data: { version: CURRENT_VERSION, books: { personal: { budgets: { Groceries: 30_000 }, recurring: [] } } } });
     expect(JSON.stringify(v1)).toBe(before);
   });
 
