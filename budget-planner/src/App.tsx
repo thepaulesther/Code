@@ -56,7 +56,7 @@ import {
   useStore,
   useToday,
 } from './lib/store';
-import { addTransfer, addUnsorted, bookBalance, sortInto, splitUnsorted, activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
+import { addRepeatingTransfer, addTransfer, addUnsorted, stopRepeatingTransfer, bookBalance, sortInto, splitUnsorted, activeBook, bookName, emptyStore, mergeView, setActiveBook, setBusinessMode, viewOf, type Book, type Store } from './lib/books';
 import { CurrencySelect } from './components/CurrencyFields';
 import { GoalDialog, GoalsPanel } from './components/GoalsPanel';
 import { PlanCard, PlanGlossary } from './components/PlanCard';
@@ -80,7 +80,7 @@ import { CustomiseOverview } from './components/overview/CustomiseOverview';
 import { ComingUp } from './components/overview/ComingUp';
 import { AddMenu, Main, MobileTopBar, MoreSheet, Sidebar, TabBar, type AddMenuItem } from './components/layout/AppShell';
 import { Dashboard } from './components/dashboard/Dashboard';
-import { PayYourself } from './components/dashboard/PayYourself';
+import { PayYourself, type PayRepeat } from './components/dashboard/PayYourself';
 import { BoxForm } from './components/dashboard/BoxForm';
 import { QuickSale } from './components/dashboard/QuickSale';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -504,11 +504,21 @@ export default function App({ initial, notice }: {
     ...(settings.currency ? [{ label: 'Move to savings', icon: 'savings' as const, tone: 'save' as const, onClick: () => navigate('savings') }] : []),
     { label: 'New money box', icon: 'plus', onClick: () => setBoxForm({}) },
   ];
-  const payYourself = (tr: { from: Book; to: Book; amount: number; date: string; note: string }) => {
+  const payYourself = (tr: { from: Book; to: Book; amount: number; date: string; note: string }, repeat: PayRepeat | null) => {
     const before = store;
-    setStore((s) => addTransfer(s, tr));
     setPaying(false);
+    if (repeat) {
+      setStore((s) => addRepeatingTransfer(s, { from: tr.from, to: tr.to, amount: tr.amount, note: tr.note, day: repeat.day, onlyIfSafe: repeat.onlyIfSafe }, todayISO()));
+      setToast(`${money(tr.amount)} will move from ${bookName(tr.from)} to ${bookName(tr.to)} every month.`, () => setStore(before));
+      return;
+    }
+    setStore((s) => addTransfer(s, tr));
     setToast(`Moved ${money(tr.amount)} from ${bookName(tr.from)} to ${bookName(tr.to)}.`, () => setStore(before));
+  };
+  const stopRepeat = (id: string) => {
+    const before = store;
+    setStore((s) => stopRepeatingTransfer(s, id));
+    setToast('Stopped. Transfers already made stay.', () => setStore(before));
   };
 
   const chooseBase = (c: string) => setStore((s) => changeStoreCurrency(s, c, 'relabel'));
@@ -1271,7 +1281,9 @@ export default function App({ initial, notice }: {
           {paying && (
             <PayYourself
               balances={{ personal: bookBalance(store, 'personal', CURRENT_MONTH), business: bookBalance(store, 'business', CURRENT_MONTH) }}
+              repeating={store.repeatingTransfers}
               onSave={payYourself}
+              onStop={stopRepeat}
               onCancel={() => setPaying(false)}
             />
           )}

@@ -15,7 +15,7 @@ import { conversionRate, round2, type RateCache } from './currency';
 import { DEFAULT_PLAN, syncAutoSavings, type AlertLevel, type Goal, type PlanSettings } from './plan';
 import { materialize, type RecurringRule } from './recurring';
 import { CURRENT_VERSION, migrate, versionOf } from './migrations';
-import { BOOKS, decodeStore, emptyStore, encodeStore, mergeView, viewOf, type Book, type Store } from './books';
+import { applyRepeatingTransfers, BOOKS, decodeStore, emptyStore, encodeStore, mergeView, stampChanges, viewOf, type Book, type Store } from './books';
 import { keysWithPrefix, readJSON, readRaw, removeKey, writeRaw } from './storage';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -280,6 +280,16 @@ export function completeData(candidate: unknown): AppData | null {
   return isAppData(merged) ? markLegacySamples(merged) : null;
 }
 
+const isRepeatingTransfer = (v: unknown) =>
+  isObj(v) &&
+  typeof v.id === 'string' &&
+  typeof v.amount === 'number' &&
+  Number.isFinite(v.amount) &&
+  typeof v.day === 'number' &&
+  typeof v.startMonth === 'string' &&
+  (v.from === 'personal' || v.from === 'business') &&
+  (v.to === 'personal' || v.to === 'business');
+
 const isTransfer = (v: unknown) =>
   isObj(v) &&
   typeof v.id === 'string' &&
@@ -290,13 +300,14 @@ const isTransfer = (v: unknown) =>
   (v.to === 'personal' || v.to === 'business');
 
 /**
- * Saved v3 data → a usable store: amounts back to major units, missing settings filled in, and every
+ * Saved v4 data → a usable store: amounts back to major units, missing settings filled in, and every
  * book checked like version 2 data always was. Null when anything isn't usable.
  */
 export function completeStore(candidate: unknown): Store | null {
   const decoded = decodeStore(candidate);
   if (!decoded) return null;
   if (!isTxArray(decoded.unsorted) || !Array.isArray(decoded.transfers) || !decoded.transfers.every(isTransfer)) return null;
+  if (!decoded.repeatingTransfers.every(isRepeatingTransfer)) return null;
   let s = decoded;
   for (const book of BOOKS) {
     const view = completeData(viewOf(s, book));
@@ -403,9 +414,9 @@ export function applyRecurring(data: AppData, today: string): AppData {
   return { ...data, recurring: rules, transactions: [...data.transactions, ...created.filter((t) => !ids.has(t.id))] };
 }
 
-/** Every book with its repeating items brought up to date. Same object when nothing changed. */
+/** Every book with its repeating items, and the repeating transfers, brought up to date. Same object when nothing changed. */
 export function applyRecurringAll(s: Store, today: string): Store {
-  let next = s;
+  let next = applyRepeatingTransfers(s, today);
   for (const book of BOOKS) {
     const view = viewOf(next, book);
     const updated = applyRecurring(view, today);
@@ -474,7 +485,12 @@ export function changeStoreCurrency(s: Store, newBase: string, mode: 'convert' |
   const unsorted = changeBaseCurrency({ ...viewOf(s, 'personal'), transactions: s.unsorted, recurring: [], budgets: {} }, newBase, mode, rate).transactions;
   const convert = mode === 'convert' && !!oldBase;
   const transfers = convert ? s.transfers.map((t) => ({ ...t, amount: round2(t.amount * rate) })) : s.transfers;
-  return { ...next, unsorted, transfers };
+  const repeatingTransfers = convert ? s.repeatingTransfers.map((r) => ({ ...r, amount: round2(r.amount * rate) })) : s.repeatingTransfers;
+  // Kept so past amounts can be redone later with each day's own rate.
+  const rateLog = oldBase
+    ? [...s.rateLog, { at: new Date().toISOString(), from: oldBase, to: newBase, rate: convert ? rate : 1, mode }]
+    : s.rateLog;
+  return { ...next, unsorted, transfers, repeatingTransfers, rateLog };
 }
 
 /* ---------- Money boxes ---------- */
@@ -597,7 +613,12 @@ export function useStore(initial: Store) {
 
   // Every change (adding, editing, deleting, importing, undo) keeps automatic savings in step.
   const setStore = useCallback<Dispatch<SetStateAction<Store>>>(
-    (update) => setRaw((s) => withAutoSavingsAll(typeof update === 'function' ? update(s) : update)),
+    (update) =>
+      setRaw((s) => {
+        const next = withAutoSavingsAll(typeof update === 'function' ? update(s) : update);
+        // Change times and deletion markers, so two devices can be merged later.
+        return stampChanges(s, next, new Date().toISOString());
+      }),
     [],
   );
 

@@ -1,12 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
-import { upgradeV2toV3 } from '../src/lib/books';
+import { upgradeV2toV3, upgradeV3toV4 } from '../src/lib/books';
 import { expect, isPhone, sampleData, stored, storedRaw, test } from './fixtures';
 
 /** The Dashboard: balance, money boxes, payments to sort, and moving money between Personal and Business. */
 
 /** Sample data saved in the current format with business mode on and two payments waiting to be sorted. */
 function withUnsorted() {
-  const s = upgradeV2toV3(sampleData()) as Record<string, unknown> & { settings: Record<string, unknown> };
+  const s = upgradeV3toV4(upgradeV2toV3(sampleData())) as Record<string, unknown> & { settings: Record<string, unknown> };
   const today = new Date().toISOString().slice(0, 10);
   s.settings = { ...s.settings, business: true };
   s.unsorted = [
@@ -92,6 +92,41 @@ test('pay yourself moves money from Business to Personal without counting as spe
   expect(pageErrors).toEqual([]);
 });
 
+test('pay yourself can repeat every month, and be stopped', async ({ page, seed, pageErrors }) => {
+  await seed(withUnsorted());
+  await page.goto('/');
+  await page.click('.book-switch [role="radio"]:has-text("Business")');
+  await page.click('.dash-add-money:has-text("Pay yourself")');
+  await page.fill('#pay-amount', '300');
+  await page.check('#pay-repeat');
+  // The day defaults to today, so the first one happens straight away.
+  await expect(page.locator('dialog[open] .pay-repeat')).toContainText('The first one happens today');
+  // The business has nothing this month, so "only if there's enough" would skip it; turn that off.
+  await expect(page.locator('dialog[open] .pay-repeat')).toContainText('will be skipped');
+  await page.uncheck('#pay-safe');
+  await page.click('dialog[open] button[type="submit"]');
+  await expect(page.locator('.toast')).toContainText('every month');
+  await expect.poll(async () => (await storedRaw(page)).repeatingTransfers.length).toBe(1);
+  const raw = await storedRaw(page);
+  expect(raw.repeatingTransfers[0]).toMatchObject({ from: 'business', to: 'personal', amount: 30_000 });
+  expect(raw.repeatingTransfers[0].onlyIfSafe).toBeUndefined();
+  expect(raw.transfers).toHaveLength(1);
+  expect(raw.transfers[0].repeatId).toBe(raw.repeatingTransfers[0].id);
+  expect(raw.transfers[0].updatedAt).toBeTruthy();
+
+  await page.click('.dash-add-money:has-text("Pay yourself")');
+  const list = page.locator('dialog[open] .pay-repeating');
+  await expect(list).toContainText('Pay yourself £300.00 on the');
+  await list.locator('button:has-text("Stop")').click();
+  await expect(page.locator('.toast')).toContainText('Stopped');
+  await expect.poll(async () => (await storedRaw(page)).repeatingTransfers.length).toBe(0);
+  const after = await storedRaw(page);
+  expect(after.repeatingTransfers).toHaveLength(0);
+  expect(after.transfers).toHaveLength(1);
+  expect(after.tombstones.map((t: { id: string }) => t.id)).toContain(raw.repeatingTransfers[0].id);
+  expect(pageErrors).toEqual([]);
+});
+
 test('the + menu on phones offers the add options', async ({ page, seed }) => {
   test.skip(!isPhone(page), 'The floating + button is for phones.');
   await seed(withUnsorted());
@@ -119,6 +154,24 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.locator('button[aria-label="Filling station: split between both"]').click();
     await page.locator('.dash-summary', { hasText: 'Savings' }).click();
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+  });
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`pay yourself with a monthly repeat meets WCAG 2.2 AA (${scheme})`, async ({ page, seed }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    const data = withUnsorted();
+    data.settings.theme = 'system';
+    data.repeatingTransfers = [{ id: 'rt1', from: 'business', to: 'personal', amount: 2_000_000, day: 28, startMonth: '2026-11', note: 'Pay yourself', onlyIfSafe: true }];
+    await seed(data);
+    await page.goto('/');
+    await page.click('.book-switch [role="radio"]:has-text("Business")');
+    await page.click('.dash-add-money:has-text("Pay yourself")');
+    await page.fill('#pay-amount', '300');
+    await page.check('#pay-repeat');
+    await expect(page.locator('dialog[open] .pay-repeating')).toContainText('on the 28th');
+    const results = await new AxeBuilder({ page }).include('dialog[open]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   });
 }

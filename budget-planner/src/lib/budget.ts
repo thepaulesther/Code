@@ -23,6 +23,8 @@ export interface Transaction {
   splitId?: string;
   /** How a sale or payment was made, when known: cash, bank transfer or POS. */
   method?: 'cash' | 'transfer' | 'pos';
+  /** When this record last changed (ISO time), for merging two devices later. */
+  updatedAt?: string;
 }
 
 /** One-off example transactions: category, note and day of month (for recognising older saved examples). */

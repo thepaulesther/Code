@@ -52,6 +52,44 @@ export interface Transfer {
   from: Book;
   to: Book;
   note: string;
+  /** Set when made by a repeating transfer. */
+  repeatId?: string;
+  /** When this record last changed (ISO time), for merging two devices later. */
+  updatedAt?: string;
+}
+
+/** A transfer that happens on its own every month, e.g. "Pay yourself ₦200,000 on the 30th". */
+export interface RepeatingTransfer {
+  id: string;
+  from: Book;
+  to: Book;
+  amount: number;
+  day: number; // 1..31
+  startMonth: string; // YYYY-MM of the first one
+  note: string;
+  /** YYYY-MM of the latest month already done (made or skipped). */
+  lastGenerated?: string;
+  paused?: boolean;
+  /** Only move the money when the sending book's balance that month covers it; otherwise skip the month. */
+  onlyIfSafe?: boolean;
+  /** Months skipped because the sending book couldn't cover it. */
+  skipped?: string[];
+  updatedAt?: string;
+}
+
+/** A record that was deleted, so another device merging later doesn't bring it back. */
+export interface Tombstone {
+  id: string;
+  at: string;
+}
+
+/** A change of base currency, with the rate used: groundwork for converting past amounts at their own day's rate. */
+export interface RateChange {
+  at: string;
+  from: string;
+  to: string;
+  rate: number;
+  mode: 'convert' | 'relabel';
 }
 
 /** Where money sits. One "Main" account per book for now; bank-linked accounts come later. */
@@ -64,14 +102,17 @@ export interface Account {
 
 export type SharedSettings = Pick<Settings, 'currency' | 'theme' | 'alerts' | 'locale' | 'business' | 'book'>;
 
-/** Everything Elora keeps, in memory (amounts in major units, e.g. naira). Saved as format v3 in minor units. */
+/** Everything Elora keeps, in memory (amounts in major units, e.g. naira). Saved as format v4 in minor units. */
 export interface Store {
-  version: 3;
+  version: 4;
   settings: SharedSettings;
   books: Record<Book, BookData>;
   transfers: Transfer[];
+  repeatingTransfers: RepeatingTransfer[];
   unsorted: Transaction[];
   accounts: Account[];
+  tombstones: Tombstone[];
+  rateLog: RateChange[];
   rates?: RateCache;
 }
 
@@ -133,12 +174,15 @@ export function mergeView(s: Store, book: Book, v: AppData): Store {
 /** A whole store from one old (v2-shaped) data set: everything goes to Personal. */
 export function storeFromView(v: AppData): Store {
   const base: Store = {
-    version: 3,
+    version: 4,
     settings: sharedOf(v.settings),
     books: { personal: emptyBook('personal'), business: emptyBook('business') },
     transfers: [],
+    repeatingTransfers: [],
     unsorted: [],
     accounts: mainAccounts(),
+    tombstones: [],
+    rateLog: [],
   };
   return mergeView(base, 'personal', v);
 }
@@ -308,6 +352,7 @@ function convAll(d: Rec, f: Conv): Rec {
     ...d,
     books: Object.fromEntries(Object.entries(books).map(([k, b]) => [k, convBook(b, f, base)])),
     transfers: list(d.transfers).map((t) => (isObj(t) ? { ...t, amount: num(t.amount, f, base) } : t)),
+    repeatingTransfers: list(d.repeatingTransfers).map((t) => (isObj(t) ? { ...t, amount: num(t.amount, f, base) } : t)),
     unsorted: list(d.unsorted).map((t) => convTx(t, f, base)),
   };
 }
@@ -318,11 +363,11 @@ export function encodeStore(s: Store): Rec {
 }
 
 /**
- * Saved v3 data back into memory, amounts in major units. Fills anything missing (the Business book,
+ * Saved v4 data back into memory, amounts in major units. Fills anything missing (the Business book,
  * accounts, lists). Returns null when it isn't v3-shaped; the records themselves are checked by the store.
  */
 export function decodeStore(raw: unknown): Store | null {
-  if (!isObj(raw) || raw.version !== 3 || !isObj(raw.books) || !isObj(raw.books.personal) || !isObj(raw.settings)) return null;
+  if (!isObj(raw) || raw.version !== 4 || !isObj(raw.books) || !isObj(raw.books.personal) || !isObj(raw.settings)) return null;
   const d = convAll(raw, fromMinor);
   const books = d.books as Rec;
   const fill = (book: Book): BookData => {
@@ -331,12 +376,15 @@ export function decodeStore(raw: unknown): Store | null {
     return { ...empty, ...b, goals: Array.isArray(b.goals) ? (b.goals as Goal[]) : [] } as BookData;
   };
   const store: Store = {
-    version: 3,
+    version: 4,
     settings: d.settings as SharedSettings,
     books: { personal: fill('personal'), business: fill('business') },
     transfers: list(d.transfers) as Transfer[],
+    repeatingTransfers: list(d.repeatingTransfers) as RepeatingTransfer[],
     unsorted: list(d.unsorted) as Transaction[],
     accounts: Array.isArray(d.accounts) && d.accounts.length ? (d.accounts as Account[]) : mainAccounts(),
+    tombstones: list(d.tombstones) as Tombstone[],
+    rateLog: list(d.rateLog) as RateChange[],
   };
   if (isObj(d.rates)) store.rates = d.rates as unknown as RateCache;
   return store;
@@ -370,4 +418,149 @@ export function upgradeV2toV3(d: Rec): Rec {
   };
   if (d.rates !== undefined) out.rates = d.rates;
   return convAll(out, toMinor);
+}
+
+/**
+ * The v3 → v4 upgrade of saved data: room for repeating transfers, deletion markers and the log of
+ * base-currency changes. Nothing existing changes.
+ */
+export function upgradeV3toV4(d: Rec): Rec {
+  // Same key order as a normal save, so opening upgraded data and saving it again writes nothing new.
+  const { settings, books, transfers, unsorted, accounts, repeatingTransfers, tombstones, rateLog, ...rest } = d;
+  return {
+    ...rest,
+    version: 4,
+    settings,
+    books,
+    transfers,
+    repeatingTransfers: list(repeatingTransfers),
+    unsorted,
+    accounts,
+    tombstones: list(tombstones),
+    rateLog: list(rateLog),
+  };
+}
+
+/* ---------- Repeating transfers ---------- */
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const nextMonth = (m: string) => {
+  const [y, mo] = m.split('-').map(Number);
+  return mo === 12 ? `${y + 1}-01` : `${y}-${pad2(mo + 1)}`;
+};
+const lastDay = (m: string) => {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(Date.UTC(y, mo, 0)).getUTCDate();
+};
+
+/**
+ * Start a repeating transfer. It begins this month when its day is still to come, otherwise next month,
+ * so nothing is back-dated.
+ */
+export function addRepeatingTransfer(
+  s: Store,
+  r: Pick<RepeatingTransfer, 'from' | 'to' | 'amount' | 'day' | 'note' | 'onlyIfSafe'>,
+  today: string,
+): Store {
+  if (r.from === r.to || !(r.amount > 0) || !(r.day >= 1 && r.day <= 31)) return s;
+  const month = today.slice(0, 7);
+  const startMonth = r.day >= Number(today.slice(8, 10)) ? month : nextMonth(month);
+  const rule: RepeatingTransfer = { id: newId(), ...r, amount: round2(r.amount), startMonth };
+  if (!rule.onlyIfSafe) delete rule.onlyIfSafe;
+  return applyRepeatingTransfers({ ...s, repeatingTransfers: [...s.repeatingTransfers, rule] }, today);
+}
+
+/** Stop a repeating transfer. Transfers it already made stay. */
+export const stopRepeatingTransfer = (s: Store, id: string): Store => ({
+  ...s,
+  repeatingTransfers: s.repeatingTransfers.filter((r) => r.id !== id),
+});
+
+/** Make every repeating transfer that has come due. Returns the same object when nothing changed. */
+export function applyRepeatingTransfers(s: Store, today: string): Store {
+  const todayMonth = today.slice(0, 7);
+  let next = s;
+  let changed = false;
+  const rules = s.repeatingTransfers.map((rule) => {
+    if (rule.paused) return rule;
+    let r = rule;
+    for (let m = r.lastGenerated ? nextMonth(r.lastGenerated) : r.startMonth; m <= todayMonth; m = nextMonth(m)) {
+      const date = `${m}-${pad2(Math.min(r.day, lastDay(m)))}`;
+      if (date > today) break;
+      if (r.onlyIfSafe && bookBalance(next, r.from, m) < r.amount) {
+        r = { ...r, lastGenerated: m, skipped: [...(r.skipped ?? []), m] };
+      } else {
+        const id = `${r.id}:${m}`;
+        if (!next.transfers.some((t) => t.id === id)) {
+          next = { ...next, transfers: [...next.transfers, { id, date, amount: r.amount, from: r.from, to: r.to, note: r.note, repeatId: r.id }] };
+        }
+        r = { ...r, lastGenerated: m };
+      }
+      changed = true;
+    }
+    return r;
+  });
+  return changed ? { ...next, repeatingTransfers: rules } : s;
+}
+
+/* ---------- Change times and deletion markers (groundwork for sync) ---------- */
+
+const MAX_TOMBSTONES = 2000;
+
+type Stamped = { id: string; updatedAt?: string };
+const body = (x: Stamped) => {
+  const rest: Record<string, unknown> = { ...x };
+  delete rest.updatedAt;
+  return JSON.stringify(rest);
+};
+
+function stampList<T extends Stamped>(before: T[], after: T[], now: string, gone: Tombstone[]): T[] {
+  if (before === after) return after;
+  const old = new Map(before.map((x) => [x.id, x]));
+  const out = after.map((x) => {
+    const prev = old.get(x.id);
+    if (prev && (prev === x || body(prev) === body(x))) return prev.updatedAt && !x.updatedAt ? { ...x, updatedAt: prev.updatedAt } : x;
+    return { ...x, updatedAt: now };
+  });
+  const ids = new Set(after.map((x) => x.id));
+  for (const x of before) if (!ids.has(x.id)) gone.push({ id: x.id, at: now });
+  return out;
+}
+
+/**
+ * Mark what changed between two versions of the store: changed or new records get `updatedAt`, removed
+ * ones leave a deletion marker. Screens don't need to do anything; this runs on every save.
+ */
+export function stampChanges(before: Store, after: Store, now: string): Store {
+  if (before === after) return after;
+  const gone: Tombstone[] = [];
+  const books = { ...after.books };
+  for (const b of BOOKS) {
+    const p = before.books[b];
+    const n = after.books[b];
+    if (p === n) continue;
+    books[b] = {
+      ...n,
+      transactions: stampList(p.transactions, n.transactions, now, gone),
+      recurring: stampList(p.recurring as (RecurringRule & Stamped)[], n.recurring as (RecurringRule & Stamped)[], now, gone),
+      goals: stampList(p.goals as (Goal & Stamped)[], n.goals as (Goal & Stamped)[], now, gone),
+    };
+  }
+  const next: Store = {
+    ...after,
+    books,
+    transfers: stampList(before.transfers, after.transfers, now, gone),
+    repeatingTransfers: stampList(before.repeatingTransfers, after.repeatingTransfers, now, gone),
+    unsorted: stampList(before.unsorted, after.unsorted, now, gone),
+  };
+  // A record moved between lists (e.g. sorted from unsorted into a book) isn't deleted.
+  const live = new Set<string>([
+    ...BOOKS.flatMap((b) => [...books[b].transactions, ...books[b].recurring, ...books[b].goals].map((x) => x.id)),
+    ...next.transfers.map((x) => x.id),
+    ...next.repeatingTransfers.map((x) => x.id),
+    ...next.unsorted.map((x) => x.id),
+  ]);
+  const deleted = gone.filter((g) => !live.has(g.id));
+  if (deleted.length) next.tombstones = [...after.tombstones, ...deleted].slice(-MAX_TOMBSTONES);
+  return next;
 }

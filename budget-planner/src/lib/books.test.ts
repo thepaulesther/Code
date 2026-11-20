@@ -15,6 +15,7 @@ import {
   storeFromView,
   transferTotals,
   upgradeV2toV3,
+  upgradeV3toV4,
   viewOf,
   type Store,
 } from './books';
@@ -79,7 +80,7 @@ describe('upgrading v2 to v3', () => {
 
   it('round-trips to the same amounts and the same totals', () => {
     const data = v2();
-    const s = completeStore(upgradeV2toV3(JSON.parse(JSON.stringify(data))));
+    const s = completeStore(upgradeV3toV4(upgradeV2toV3(JSON.parse(JSON.stringify(data)))));
     expect(s).not.toBeNull();
     const view = viewOf(s!, 'personal');
     expect(view.transactions).toEqual(data.transactions);

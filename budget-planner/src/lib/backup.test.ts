@@ -39,7 +39,7 @@ describe('backup round trip', () => {
 
   it('includes settings, goals, repeating items and alert history', async () => {
     const file = JSON.parse(await createBackup(store()));
-    expect(file).toMatchObject({ format: 'elora-backup', formatVersion: 1, dataVersion: 3 });
+    expect(file).toMatchObject({ format: 'elora-backup', formatVersion: 1, dataVersion: 4 });
     expect(file.data.settings.theme).toBe('dark');
     expect(file.data.books.personal.goals[0].contributions).toHaveLength(1);
     expect(file.data.books.personal.alertLog).toEqual({ '2026-11': 'near-plan' });

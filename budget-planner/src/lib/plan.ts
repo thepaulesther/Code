@@ -20,6 +20,8 @@ export interface Goal {
   /** Month the money is needed by (YYYY-MM). Without one, the goal shares the general savings slice. */
   targetMonth?: string;
   contributions: Contribution[];
+  /** When this record last changed (ISO time), for merging two devices later. */
+  updatedAt?: string;
   /** Save this share of income (0..1) each month, e.g. 0.2 for 20%. Takes priority over the date. */
   incomeShare?: number;
   /** With `incomeShare`: record that share of each income automatically as saved in this goal. */

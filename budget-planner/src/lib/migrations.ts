@@ -1,4 +1,4 @@
-import { upgradeV2toV3 } from './books';
+import { upgradeV2toV3, upgradeV3toV4 } from './books';
 
 /**
  * Versioned upgrades of the stored data. Each step turns version n into n + 1 and is a pure function,
@@ -8,7 +8,7 @@ import { upgradeV2toV3 } from './books';
  * Adding a format: bump CURRENT_VERSION, append a step, add tests with real old-format fixtures.
  */
 
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 4;
 
 export interface Migration {
   from: number;
@@ -38,6 +38,12 @@ export const MIGRATIONS: Migration[] = [
     to: 3,
     describe: 'Version 2 kept one set of money in decimal amounts. Version 3 keeps Personal and Business apart and saves amounts as whole kobo (minor units).',
     run: (d) => upgradeV2toV3(d),
+  },
+  {
+    from: 3,
+    to: 4,
+    describe: 'Version 4 adds repeating transfers, change times and deletion markers (for using Elora on two devices later) and a log of base-currency changes.',
+    run: (d) => upgradeV3toV4(d),
   },
 ];
 
